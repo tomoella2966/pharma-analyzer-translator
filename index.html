@@ -1,0 +1,1295 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>국가별 문서 비교 분석기</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Noto+Serif+KR:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
+<style>
+:root{
+  --bg:#F7F6F2;--surface:#FFFFFF;--surface2:#F0EEE8;
+  --border:#E2DED6;--border2:#CCC8BE;
+  --text:#1A1916;--text2:#6B6760;--text3:#9B9890;
+  --accent:#2D5BE3;--accent-bg:#EEF2FD;--accent-border:#C0CFF8;
+  --r:8px;--rl:12px;
+  --font:'Noto Sans KR',sans-serif;
+  --serif:'Noto Serif KR',serif;
+  --mono:'IBM Plex Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--text);font-size:14px;line-height:1.65;}
+.layout{display:grid;grid-template-columns:300px 1fr;height:100vh;}
+
+/* SIDEBAR */
+.sb{background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;height:100vh;position:sticky;top:0;overflow-y:auto;}
+.sb::-webkit-scrollbar{width:4px;}
+.sb::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px;}
+.sb-logo{padding:1.25rem 1.25rem 1rem;border-bottom:1px solid var(--border);}
+.sb-logo-label{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:5px;}
+.sb-logo-title{font-family:var(--serif);font-size:16px;font-weight:600;color:var(--text);line-height:1.35;}
+.sb-logo-sub{font-size:11px;color:var(--text3);margin-top:4px;}
+.sb-ai-chip{display:inline-flex;align-items:center;gap:4px;background:var(--accent-bg);color:var(--accent);font-size:10px;font-weight:500;padding:3px 9px;border-radius:20px;border:1px solid var(--accent-border);margin-top:7px;}
+.ai-dot{width:5px;height:5px;border-radius:50%;background:var(--accent);animation:pulse 1.5s infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.sb-sec{padding:.9rem 1.25rem .3rem;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);}
+
+/* 탭 */
+.sb-tab-bar{display:flex;gap:3px;padding:.3rem 1.25rem .5rem;background:var(--surface);}
+.sb-tab{flex:1;padding:6px 4px;text-align:center;font-size:11px;font-weight:500;cursor:pointer;border:none;background:var(--surface2);color:var(--text2);border-radius:6px;font-family:var(--font);transition:all .15s;}
+.sb-tab.active{background:var(--accent);color:#fff;}
+.sb-panel{display:none;flex-direction:column;flex:1;}
+.sb-panel.active{display:flex;}
+
+/* 분석 모드 */
+.sb-mode{padding:.25rem 1.25rem .75rem;}
+.mode-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px;}
+.mode-btn{padding:7px 5px;border:1px solid var(--border2);border-radius:var(--r);font-size:11px;font-weight:500;cursor:pointer;background:var(--surface2);color:var(--text2);font-family:var(--font);text-align:center;transition:all .15s;line-height:1.4;}
+.mode-btn.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);}
+
+/* 국가 추가 영역 */
+.country-add-area{padding:.25rem 1.25rem .75rem;}
+.country-search-row{display:flex;gap:5px;margin-bottom:8px;}
+.country-search-row input{flex:1;border:1px solid var(--border);border-radius:var(--r);padding:7px 9px;font-size:12px;font-family:var(--font);background:var(--bg);color:var(--text);outline:none;}
+.country-search-row input:focus{border-color:var(--accent);}
+.country-search-row button{padding:7px 11px;background:var(--accent);color:#fff;border:none;border-radius:var(--r);font-size:11px;cursor:pointer;white-space:nowrap;font-family:var(--font);}
+.country-dropdown{max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--r);background:var(--surface);margin-bottom:8px;display:none;}
+.country-dropdown.show{display:block;}
+.country-opt{padding:7px 10px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--border);}
+.country-opt:last-child{border-bottom:none;}
+.country-opt:hover{background:var(--accent-bg);}
+
+/* 선택된 국가 칩 */
+.selected-countries{display:flex;flex-wrap:wrap;gap:5px;padding:.25rem 1.25rem .75rem;}
+.country-chip{display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:11px;color:var(--text);}
+.country-chip button{background:none;border:none;cursor:pointer;color:var(--text3);font-size:13px;line-height:1;padding:0 0 0 2px;}
+.country-chip button:hover{color:#B5202A;}
+
+/* 문서 업로드 */
+.doc-upload-area{padding:.25rem 1.25rem .75rem;display:flex;flex-direction:column;gap:5px;}
+.entity-item{background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:7px 10px;}
+.simple-drop-zone{border:1.5px dashed var(--border2);border-radius:var(--r);padding:1.25rem 1rem;text-align:center;cursor:pointer;background:var(--surface2);font-size:12px;color:var(--text2);line-height:1.8;transition:border-color .15s;}
+.simple-drop-zone:hover{border-color:var(--accent);background:var(--accent-bg);}
+.simple-file-chip{display:flex;align-items:center;gap:7px;padding:6px 9px;background:#E8F5EE;border:1px solid #a7dfc5;border-radius:6px;font-size:11px;}
+.simple-file-chip span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#0d6e4f;font-weight:500;}
+.simple-file-chip button{background:none;border:none;cursor:pointer;color:var(--text3);font-size:14px;line-height:1;}
+.entity-top{display:flex;align-items:center;gap:6px;margin-bottom:4px;}
+.entity-flag{font-size:12px;}
+.entity-name{font-size:12px;font-weight:500;color:var(--text);flex:1;}
+.entity-del{background:none;border:none;cursor:pointer;color:var(--text3);font-size:14px;padding:0;}
+.entity-del:hover{color:#B5202A;}
+.entity-upload{display:flex;align-items:center;gap:5px;cursor:pointer;}
+.entity-upload-box{flex:1;font-size:10px;color:var(--text3);background:var(--bg);border:1px dashed var(--border2);border-radius:5px;padding:4px 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:all .15s;}
+.entity-upload-box.loaded{border-color:var(--accent);color:var(--accent);background:var(--accent-bg);border-style:solid;}
+input[type=file]{display:none;}
+
+/* 번역 패널 */
+.trans-panel-body{padding:.5rem 1.25rem 1rem;display:flex;flex-direction:column;gap:8px;flex:1;}
+.trans-lang-row{display:flex;gap:6px;align-items:center;}
+.trans-lang-row select{flex:1;border:1px solid var(--border);border-radius:var(--r);padding:7px 9px;font-size:12px;font-family:var(--font);background:var(--bg);color:var(--text);outline:none;}
+.trans-arrow{color:var(--text3);font-size:16px;}
+.trans-tab-bar{display:flex;gap:3px;background:var(--surface2);padding:3px;border-radius:8px;}
+.trans-tab{flex:1;padding:6px;text-align:center;font-size:11px;cursor:pointer;border:none;background:transparent;color:var(--text2);border-radius:5px;font-family:var(--font);transition:all .15s;}
+.trans-tab.active{background:var(--surface);color:var(--text);font-weight:500;}
+.trans-upload-zone{border:1.5px dashed var(--border2);border-radius:var(--r);padding:1.5rem 1rem;text-align:center;cursor:pointer;background:var(--surface2);transition:all .15s;font-size:12px;color:var(--text2);}
+.trans-upload-zone:hover{border-color:var(--accent);background:var(--accent-bg);}
+.trans-file-chip{display:flex;align-items:center;gap:7px;padding:8px 10px;background:#E8F5EE;border:1px solid #a7dfc5;border-radius:var(--r);font-size:11px;}
+.trans-file-chip span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#0d6e4f;font-weight:500;}
+.trans-file-chip button{background:none;border:none;cursor:pointer;color:var(--text3);font-size:15px;}
+textarea.trans-input{width:100%;border:1px solid var(--border);border-radius:var(--r);padding:9px 11px;font-size:12px;font-family:var(--font);background:var(--bg);color:var(--text);outline:none;resize:vertical;min-height:80px;}
+textarea.trans-input:focus{border-color:var(--accent);}
+input.trans-url{width:100%;border:1px solid var(--border);border-radius:var(--r);padding:9px 11px;font-size:12px;font-family:var(--font);background:var(--bg);color:var(--text);outline:none;}
+input.trans-url:focus{border-color:var(--accent);}
+.trans-btn{width:100%;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:var(--r);font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font);transition:background .15s;}
+.trans-btn:hover{background:#1f48c4;}
+.trans-btn:disabled{opacity:.4;cursor:not-allowed;}
+.trans-result-box{background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px;font-size:12px;line-height:1.8;color:var(--text);max-height:200px;overflow-y:auto;white-space:pre-wrap;}
+.trans-dl-row{display:flex;gap:5px;flex-wrap:wrap;}
+.trans-dl-btn{flex:1;padding:7px;border:1px solid var(--border2);border-radius:6px;font-size:11px;cursor:pointer;background:var(--surface);color:var(--text2);font-family:var(--font);text-align:center;transition:all .12s;}
+.trans-dl-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent);}
+
+.sb-footer{margin-top:auto;padding:.75rem 1.25rem;border-top:1px solid var(--border);font-size:10px;color:var(--text3);line-height:1.7;}
+
+/* MAIN */
+.main{overflow-y:auto;height:100vh;padding:2rem 2rem 4rem;}
+.main::-webkit-scrollbar{width:5px;}
+.main::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px;}
+.main-header{margin-bottom:1.5rem;padding-bottom:1.25rem;border-bottom:1px solid var(--border);}
+.main-label{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:6px;}
+.main-title{font-family:var(--serif);font-size:24px;font-weight:600;color:var(--text);letter-spacing:-.3px;line-height:1.3;}
+.main-title span{color:var(--accent);}
+.main-sub{font-size:13px;color:var(--text2);margin-top:6px;line-height:1.75;}
+.chips{display:flex;gap:5px;margin-top:8px;flex-wrap:wrap;}
+.chip{font-size:11px;padding:3px 10px;border-radius:20px;border:1px solid var(--border);background:var(--surface);color:var(--text3);}
+.chip.on{background:var(--accent-bg);color:var(--accent);border-color:var(--accent-border);}
+
+.topic-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:1.1rem 1.5rem;margin-bottom:1rem;}
+.topic-row{display:flex;gap:8px;margin-bottom:8px;}
+.topic-row select{flex:1;border:1px solid var(--border);border-radius:var(--r);padding:9px 12px;font-size:13px;font-family:var(--font);background:var(--bg);color:var(--text);outline:none;cursor:pointer;}
+.topic-custom{width:100%;border:1px solid var(--border);border-radius:var(--r);padding:9px 12px;font-size:13px;font-family:var(--font);background:var(--bg);color:var(--text);outline:none;margin-bottom:8px;display:none;}
+.topic-custom.show{display:block;}
+
+.search-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:1.1rem 1.5rem;margin-bottom:1.5rem;}
+.search-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--text3);margin-bottom:8px;}
+.search-btn{padding:10px 22px;background:var(--accent);color:#fff;border:none;border-radius:var(--r);font-size:13px;font-weight:500;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:background .15s;}
+.search-btn:hover{background:#1f48c4;}
+.search-btn:disabled{opacity:.4;cursor:not-allowed;}
+.search-hint{font-size:12px;color:var(--text3);margin-top:8px;line-height:1.7;}
+.search-hint b{color:var(--text2);font-weight:500;}
+.kw-row{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px;}
+.kw{font-size:11px;padding:3px 10px;border-radius:20px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);cursor:pointer;transition:all .15s;}
+.kw:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent-border);}
+
+/* Result */
+.result-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;}
+.result-kw{font-size:17px;font-weight:500;color:var(--text);}
+.result-kw em{color:var(--accent);font-style:normal;}
+.exp-row{display:flex;gap:5px;flex-wrap:wrap;}
+.exp-btn{display:flex;align-items:center;gap:4px;padding:6px 12px;border:1px solid var(--border2);border-radius:var(--r);font-size:12px;font-weight:500;cursor:pointer;background:var(--surface);color:var(--text2);font-family:var(--font);transition:all .15s;}
+.exp-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg);}
+.ai-sum{background:var(--accent-bg);border:1px solid var(--accent-border);border-radius:var(--rl);padding:1rem 1.25rem;margin-bottom:1rem;}
+.ai-sum-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);margin-bottom:5px;display:flex;align-items:center;gap:5px;}
+.ai-sum-body{font-size:13px;color:var(--text);line-height:1.85;}
+.diff-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:7px;margin-bottom:1.1rem;}
+.diff-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:9px 11px;}
+.diff-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);margin-bottom:2px;}
+.diff-val{font-size:12px;font-weight:500;color:var(--text);}
+.tbl-outer{border-radius:var(--rl);border:1px solid var(--border);overflow:hidden;background:var(--surface);}
+table.rtbl{width:100%;border-collapse:collapse;}
+table.rtbl th{padding:9px 13px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);background:var(--surface2);border-bottom:1px solid var(--border);text-align:left;white-space:nowrap;}
+table.rtbl td{padding:13px;border-bottom:1px solid var(--border);vertical-align:top;}
+table.rtbl tr:last-child td{border-bottom:none;}
+table.rtbl tr:hover td{background:#FAFAF8;}
+.cpill{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:500;white-space:nowrap;background:#F0EEE8;color:#5C5852;}
+.trans-text{font-size:13px;line-height:1.8;color:var(--text);min-width:200px;}
+.hl{background:#FFF3C0;color:#7A5800;padding:1px 3px;border-radius:3px;font-weight:500;}
+.orig-box{font-size:11px;font-family:var(--mono);color:var(--text2);background:var(--surface2);border-radius:5px;padding:7px 9px;line-height:1.65;min-width:150px;}
+.ref-row{display:flex;flex-direction:column;gap:3px;min-width:100px;}
+.ref-chip{font-size:10px;font-family:var(--mono);background:var(--surface2);border:1px solid var(--border);color:var(--text3);padding:2px 6px;border-radius:4px;white-space:nowrap;display:inline-block;}
+.loading-area{text-align:center;padding:4rem 2rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);}
+.lds{display:inline-flex;gap:6px;}
+.lds span{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:ld 1s infinite;}
+.lds span:nth-child(2){animation-delay:.15s;}
+.lds span:nth-child(3){animation-delay:.3s;}
+@keyframes ld{0%,100%{transform:translateY(0);opacity:.3}50%{transform:translateY(-7px);opacity:1}}
+.loading-step{font-size:13px;color:var(--text2);margin-top:12px;}
+.empty-area{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:4rem 2rem;text-align:center;}
+.empty-icon{font-size:36px;margin-bottom:12px;}
+.empty-title{font-size:16px;font-weight:500;color:var(--text);margin-bottom:7px;}
+.empty-sub{font-size:13px;color:var(--text2);line-height:1.9;}
+.edit-on{background:var(--accent)!important;color:#fff!important;border-color:var(--accent)!important;}
+[contenteditable=true]{outline:none;border-bottom:1.5px dashed var(--accent);cursor:text;}
+[contenteditable=true]:focus{background:var(--accent-bg);border-radius:3px;}
+.edit-badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;padding:2px 8px;border-radius:20px;background:#FEF3E8;color:#C4620A;border:1px solid #EF9F27;margin-left:8px;}
+.law-report{font-family:'맑은 고딕','Noto Sans KR',sans-serif;background:var(--surface);border-radius:var(--rl);border:1px solid var(--border);overflow:hidden;margin-bottom:1rem;}
+.law-report-header{text-align:center;padding:1.5rem 1rem 1rem;border-bottom:2px solid var(--text);}
+.law-report-title{font-size:20px;font-weight:700;color:var(--text);}
+.law-report-meta{font-size:12px;color:var(--text2);margin-top:6px;}
+.law-tbl{width:100%;border-collapse:collapse;}
+.law-tbl th{background:var(--text);color:#fff;padding:8px 12px;font-size:12px;text-align:center;border:1px solid var(--text);}
+.law-tbl td{padding:10px 12px;border:1px solid var(--border2);vertical-align:top;font-size:12px;line-height:1.8;}
+.law-tbl tr:nth-child(even) td{background:var(--surface2);}
+.rpt-wrap{background:var(--surface);border-radius:var(--rl);border:1px solid var(--border);padding:2rem;margin-bottom:1rem;}
+.rpt-meta{text-align:right;font-size:11px;color:var(--text3);margin-bottom:.5rem;}
+.rpt-title{font-size:22px;font-weight:700;color:var(--text);text-align:center;margin-bottom:1.5rem;line-height:1.4;border-bottom:2px solid var(--text);padding-bottom:10px;}
+.rpt-section{margin-bottom:1.2rem;}
+.rpt-section-num{font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;}
+.rpt-item{font-size:13px;color:var(--text);line-height:1.8;padding-left:1rem;}
+.rpt-sub{font-size:12px;color:var(--text2);line-height:1.8;padding-left:2rem;}
+.err-box{background:#FDECED;border:1px solid #F5C0C4;border-radius:var(--r);padding:12px 16px;font-size:13px;color:#8B1A20;margin-bottom:1rem;}
+@media(max-width:800px){.layout{grid-template-columns:1fr;height:auto;}.sb{height:auto;position:static;}.main{height:auto;padding:1.25rem 1rem 3rem;}}
+</style>
+</head>
+<body>
+<div class="layout">
+
+<!-- ════ SIDEBAR ════ -->
+<aside class="sb">
+  <div class="sb-logo">
+    <div class="sb-logo-label">Comparative Document Analyzer</div>
+    <div class="sb-logo-title">국가별 문서 비교 분석기</div>
+    <div class="sb-logo-sub">법령 · 하위규칙 · 제도 · 가이드라인 · 번역</div>
+    <div class="sb-ai-chip"><span class="ai-dot"></span> OpenRouter AI · 완전 무료</div>
+  </div>
+
+  <!-- API 키 -->
+  <div class="sb-sec">API 키 설정</div>
+  <div style="padding:.25rem 1.25rem .75rem;">
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:9px 11px;margin-bottom:7px;font-size:11px;color:var(--text2);line-height:1.6;">
+      <b style="color:var(--text);">OpenRouter API 키 입력</b><br>openrouter.ai → Keys → Create Key
+    </div>
+    <div style="display:flex;gap:5px;margin-bottom:5px;">
+      <input type="password" id="or-key-input" placeholder="sk-or-v1-..." style="flex:1;border:1px solid var(--border);border-radius:var(--r);padding:7px 9px;font-size:11px;font-family:var(--mono);background:var(--bg);color:var(--text);outline:none;"/>
+      <button onclick="saveOrKey()" style="background:var(--accent);color:#fff;border:none;border-radius:var(--r);padding:7px 11px;font-size:11px;font-weight:500;cursor:pointer;">저장</button>
+    </div>
+    <div id="or-key-status" style="font-size:11px;padding:4px 8px;border-radius:var(--r);text-align:center;background:var(--surface2);color:var(--text3);">키 미입력</div>
+    <div style="font-size:10px;color:var(--text3);margin-top:5px;line-height:1.6;">키는 이 브라우저에만 저장됩니다.<br>GitHub에 올라가지 않아 안전해요.</div>
+  </div>
+
+  <!-- 사이드바 탭 -->
+  <div class="sb-tab-bar">
+    <button class="sb-tab active" onclick="switchSbTab('analyze',this)">🔍 분석</button>
+    <button class="sb-tab" onclick="switchSbTab('translate',this)">🌐 번역</button>
+  </div>
+
+  <!-- 분석 패널 -->
+  <div class="sb-panel active" id="sb-analyze">
+    <div class="sb-sec">분석 모드</div>
+    <div class="sb-mode">
+      <div class="mode-grid">
+        <button class="mode-btn active" id="mode-law" onclick="setMode('law')">⚖️ 법령·규칙<br>비교</button>
+        <button class="mode-btn" id="mode-inst" onclick="setMode('inst')">🏛️ 제도·정책<br>비교</button>
+        <button class="mode-btn" id="mode-guide" onclick="setMode('guide')">📋 가이드라인<br>비교</button>
+        <button class="mode-btn" id="mode-free" onclick="setMode('free')">📄 자유형식<br>문서비교</button>
+      </div>
+      <div id="mode-desc" style="font-size:11px;color:var(--text2);margin-top:7px;line-height:1.6;padding:7px 10px;background:var(--surface2);border-radius:var(--r);"></div>
+    </div>
+
+    <div class="sb-sec">비교 국가 선택 <span style="font-weight:400;font-size:10px;">(전세계 · 제한없음)</span></div>
+    <div class="country-add-area">
+      <div class="country-search-row">
+        <input type="text" id="country-search" placeholder="국가명 검색 또는 직접 입력..." oninput="filterCountries()" onkeydown="if(event.key==='Enter')addCustomCountry()"/>
+        <button onclick="addCustomCountry()">추가</button>
+      </div>
+      <div class="country-dropdown" id="country-dropdown"></div>
+      <div style="font-size:10px;color:var(--text3);line-height:1.6;margin-bottom:6px;">목록에 없는 국가는 직접 입력 후 추가 버튼을 눌러주세요.</div>
+    </div>
+    <div class="selected-countries" id="selected-countries"></div>
+
+    <div class="sb-sec">문서 업로드</div>
+    <div style="padding:.25rem 1.25rem .75rem;">
+      <div class="simple-drop-zone" id="simple-drop-zone"
+        onclick="document.getElementById('simple-file-input').click()"
+        ondragover="event.preventDefault();document.getElementById('simple-drop-zone').style.borderColor='var(--accent)'"
+        ondragleave="document.getElementById('simple-drop-zone').style.borderColor=''"
+        ondrop="event.preventDefault();document.getElementById('simple-drop-zone').style.borderColor='';handleSimpleFiles(event.dataTransfer.files)">
+        📁 클릭하거나 파일을 드래그<br>
+        <span style="font-size:10px;color:var(--text3);">TXT · HTML · MD · PDF(텍스트) · 여러 파일 동시 가능</span>
+      </div>
+      <input type="file" id="simple-file-input" accept=".txt,.html,.htm,.md,.pdf,.docx,.rtf,.xml" multiple onchange="handleSimpleFiles(this.files)">
+      <div id="simple-file-list" style="display:flex;flex-direction:column;gap:4px;margin-top:6px;"></div>
+      <div style="font-size:10px;color:var(--text3);margin-top:6px;line-height:1.6;">업로드한 문서를 AI가 분석에 참고합니다.<br>문서 없이도 AI 지식으로 분석 가능합니다.</div>
+    </div>
+
+    <div class="sb-footer">
+      업로드 문서는 브라우저 내에서만 처리됩니다.<br>
+      문서 없이도 AI 학습 지식으로 분석 가능합니다.<br><br>
+      Powered by OpenRouter · Google Gemini 2.0 Flash
+    </div>
+  </div>
+
+  <!-- 번역 패널 -->
+  <div class="sb-panel" id="sb-translate">
+    <div class="trans-panel-body">
+      <div style="font-size:12px;font-weight:600;color:var(--text);margin-top:4px;">해외 문서 → 한국어 번역</div>
+      <div style="font-size:11px;color:var(--text2);line-height:1.6;">파일 업로드, URL, 직접 입력 모두 지원.<br>번역 결과를 DOCX · HWPX · TXT로 저장.</div>
+
+      <div class="trans-lang-row">
+        <select id="trans-src-lang">
+          <option value="">자동 감지</option>
+          <option value="영어">영어</option>
+          <option value="일본어">일본어</option>
+          <option value="중국어">중국어</option>
+          <option value="프랑스어">프랑스어</option>
+          <option value="독일어">독일어</option>
+          <option value="스페인어">스페인어</option>
+          <option value="이탈리아어">이탈리아어</option>
+          <option value="러시아어">러시아어</option>
+          <option value="포르투갈어">포르투갈어</option>
+          <option value="아랍어">아랍어</option>
+          <option value="네덜란드어">네덜란드어</option>
+          <option value="폴란드어">폴란드어</option>
+          <option value="태국어">태국어</option>
+          <option value="베트남어">베트남어</option>
+          <option value="인도네시아어">인도네시아어</option>
+        </select>
+        <span class="trans-arrow">→</span>
+        <div style="font-size:12px;font-weight:600;color:var(--accent);padding:7px 10px;background:var(--accent-bg);border-radius:var(--r);">한국어</div>
+      </div>
+
+      <div class="trans-tab-bar">
+        <button class="trans-tab active" onclick="switchTransTab('file',this)">📄 파일</button>
+        <button class="trans-tab" onclick="switchTransTab('url',this)">🔗 URL</button>
+        <button class="trans-tab" onclick="switchTransTab('text',this)">✏️ 텍스트</button>
+      </div>
+
+      <div id="trans-file-panel">
+        <div class="trans-upload-zone" onclick="document.getElementById('trans-file-input').click()" ondragover="event.preventDefault();this.style.borderColor='var(--accent)'" ondragleave="this.style.borderColor=''" ondrop="event.preventDefault();handleTransFile(event.dataTransfer.files[0])">
+          📁 클릭하거나 파일을 드래그<br><span style="font-size:11px;color:var(--text3);">TXT · HTML · MD · DOCX</span>
+        </div>
+        <input type="file" id="trans-file-input" accept=".txt,.html,.htm,.md,.docx,.rtf,.xml" onchange="handleTransFile(this.files[0])">
+        <div id="trans-file-badge" style="display:none;margin-top:6px;"></div>
+      </div>
+      <div id="trans-url-panel" style="display:none;">
+        <input type="url" class="trans-url" id="trans-url-input" placeholder="https://example.com/document.html"/>
+        <div style="font-size:10px;color:var(--text3);margin-top:5px;">공개 접근 가능한 URL을 입력하세요.</div>
+      </div>
+      <div id="trans-text-panel" style="display:none;">
+        <textarea class="trans-input" id="trans-text-input" placeholder="번역할 텍스트를 붙여넣으세요..."></textarea>
+      </div>
+
+      <button class="trans-btn" id="trans-btn" onclick="doTranslate()">🌐 한국어로 번역</button>
+
+      <div id="trans-result-area" style="display:none;">
+        <div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:5px;">번역 결과</div>
+        <div class="trans-result-box" id="trans-result-text"></div>
+        <div class="trans-dl-row" style="margin-top:7px;">
+          <button class="trans-dl-btn" onclick="transDownload('docx')">📄 DOCX</button>
+          <button class="trans-dl-btn" onclick="transDownload('hwpx')">📝 HWPX</button>
+          <button class="trans-dl-btn" onclick="transDownload('txt')">📋 TXT</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<!-- ════ MAIN ════ -->
+<main class="main">
+  <div class="main-header">
+    <div class="main-label" id="main-label">Pharmaceutical Regulatory Intelligence</div>
+    <div class="main-title" id="main-title">국가별 제약 법령 <span>비교 분석</span></div>
+    <div class="main-sub" id="main-sub">전세계 어느 국가든 선택하여 비교 분석. 한국어로 검색하면 AI가 각국 언어로 번역하여 관련 내용을 추출하고 한국어 번역 + 원문 + 출처를 함께 표시합니다.</div>
+    <div class="chips">
+      <span class="chip on">전세계 국가</span>
+      <span class="chip on">한국어 검색</span>
+      <span class="chip on">자동 번역</span>
+      <span class="chip on">원문 출처 표기</span>
+      <span class="chip on">Word·HWPX·PDF 보고서</span>
+      <span class="chip on">완전 무료</span>
+    </div>
+  </div>
+
+  <div class="topic-card">
+    <div class="search-lbl">분석 주제 / 문서 유형 설정</div>
+    <div class="topic-row">
+      <select id="topic-preset" onchange="onTopicChange()">
+        <optgroup label="제약·의약품">
+          <option value="pharma-law">제약 법령 (약사법·FDA·EMA 등)</option>
+          <option value="pharma-gmp">GMP 기준 및 제조관리</option>
+          <option value="pharma-clinical">임상시험 규정</option>
+          <option value="pharma-label">의약품 라벨링·표시 규정</option>
+          <option value="pharma-rare">희귀의약품·우선심사 제도</option>
+        </optgroup>
+        <optgroup label="제도·정책 비교">
+          <option value="inst-benefit">우대사항·혜택 제도 비교</option>
+          <option value="inst-patent">특허·지식재산권 제도</option>
+          <option value="inst-tax">세제혜택·R&D 지원 제도</option>
+          <option value="inst-approval">인허가 절차·기간 비교</option>
+        </optgroup>
+        <optgroup label="기타 문서">
+          <option value="guide-safety">안전성 가이드라인</option>
+          <option value="guide-report">보고·신고 의무 규정</option>
+          <option value="sub-law">하위법령·시행규칙·고시 비교</option>
+          <option value="custom">직접 입력...</option>
+        </optgroup>
+      </select>
+    </div>
+    <input type="text" class="topic-custom" id="topic-custom-input" placeholder="분석 주제를 직접 입력하세요">
+  </div>
+
+  <div class="search-card">
+    <div class="search-lbl" style="display:flex;align-items:center;justify-content:space-between;">
+      <span>질문 / 키워드 입력</span>
+      <div style="display:flex;gap:4px;">
+        <button id="mode-kw-btn" onclick="setSearchMode('kw')" style="font-size:11px;padding:3px 10px;border-radius:20px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer;font-family:var(--font);">키워드</button>
+        <button id="mode-q-btn" onclick="setSearchMode('q')" style="font-size:11px;padding:3px 10px;border-radius:20px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:pointer;font-family:var(--font);">줄글 질문</button>
+      </div>
+    </div>
+
+    <!-- 검색 소스 선택 -->
+    <div style="display:flex;gap:6px;margin-top:10px;align-items:stretch;">
+      <div id="src-doc-btn" onclick="setSearchSource('doc')" style="flex:1;padding:9px 8px;border-radius:var(--r);border:1.5px solid var(--accent);background:var(--accent-bg);cursor:pointer;text-align:center;">
+        <div style="font-size:13px;margin-bottom:2px;">📄</div>
+        <div style="font-size:11px;font-weight:600;color:var(--accent);">업로드 문서</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:1px;">문서 우선 검색</div>
+      </div>
+      <div id="src-web-btn" onclick="setSearchSource('web')" style="flex:1;padding:9px 8px;border-radius:var(--r);border:1.5px solid var(--border2);background:var(--surface2);cursor:pointer;text-align:center;">
+        <div style="font-size:13px;margin-bottom:2px;">🌐</div>
+        <div style="font-size:11px;font-weight:600;color:var(--text2);">웹 서칭</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:1px;">실시간 검색</div>
+      </div>
+      <div id="src-both-btn" onclick="setSearchSource('both')" style="flex:1;padding:9px 8px;border-radius:var(--r);border:1.5px solid var(--border2);background:var(--surface2);cursor:pointer;text-align:center;">
+        <div style="font-size:13px;margin-bottom:2px;">📄+🌐</div>
+        <div style="font-size:11px;font-weight:600;color:var(--text2);">문서+웹</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:1px;">둘 다 검색</div>
+      </div>
+    </div>
+    <div id="search-source-hint" style="font-size:11px;color:var(--text3);margin-top:6px;padding:6px 10px;background:var(--surface2);border-radius:6px;line-height:1.6;">
+      📄 <b style="color:var(--text2);">업로드 문서 우선:</b> 업로드한 파일에서 먼저 찾고, 없으면 AI 지식으로 답합니다.
+    </div>
+
+    <div style="margin-top:9px;">
+      <textarea id="keyword" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();doSearch();}" placeholder="예: 임상시험 승인 절차, GMP 기준..." style="width:100%;border:1px solid var(--border);border-radius:var(--r);padding:10px 14px;font-size:14px;font-family:var(--font);background:var(--bg);color:var(--text);outline:none;resize:vertical;min-height:48px;max-height:160px;line-height:1.6;transition:border-color .15s;"></textarea>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;flex-wrap:wrap;gap:8px;">
+      <div class="search-hint" style="margin-top:0;" id="search-hint-text">
+        <b>키워드 모드:</b> 핵심 단어로 입력 — 엔터로 바로 검색<br>
+        <b>줄글 모드:</b> "~가 어떻게 다른지 알고싶어" 처럼 자연어로 질문
+      </div>
+      <button class="search-btn" id="search-btn" onclick="doSearch()">AI 분석 시작</button>
+    </div>
+    <div class="kw-row" id="kw-samples"></div>
+  </div>
+
+  <div id="result-area">
+    <div class="empty-area">
+      <div class="empty-icon">📋</div>
+      <div class="empty-title">분석을 시작하세요</div>
+      <div class="empty-sub">왼쪽에서 전세계 국가를 자유롭게 선택하고<br>키워드를 검색하면 비교표가 나타납니다.<br><br><span style="font-size:12px;color:var(--text3)">법령·제도·가이드라인 등 어떤 문서든, 어느 나라든 비교 가능합니다</span></div>
+    </div>
+  </div>
+</main>
+</div>
+
+<script>
+// ─── API 키 ───
+let OPENROUTER_API_KEY = localStorage.getItem('or_api_key') || '';
+
+// ─── 전세계 국가 목록 ───
+const ALL_COUNTRIES = [
+  {key:'kr',flag:'🇰🇷',name:'한국',lang:'Korean'},
+  {key:'us',flag:'🇺🇸',name:'미국',lang:'English'},
+  {key:'eu',flag:'🇪🇺',name:'EU',lang:'English'},
+  {key:'jp',flag:'🇯🇵',name:'일본',lang:'Japanese'},
+  {key:'uk',flag:'🇬🇧',name:'영국',lang:'English'},
+  {key:'cn',flag:'🇨🇳',name:'중국',lang:'Chinese'},
+  {key:'de',flag:'🇩🇪',name:'독일',lang:'German'},
+  {key:'fr',flag:'🇫🇷',name:'프랑스',lang:'French'},
+  {key:'ca',flag:'🇨🇦',name:'캐나다',lang:'English'},
+  {key:'au',flag:'🇦🇺',name:'호주',lang:'English'},
+  {key:'ch',flag:'🇨🇭',name:'스위스',lang:'German'},
+  {key:'se',flag:'🇸🇪',name:'스웨덴',lang:'Swedish'},
+  {key:'nl',flag:'🇳🇱',name:'네덜란드',lang:'Dutch'},
+  {key:'it',flag:'🇮🇹',name:'이탈리아',lang:'Italian'},
+  {key:'es',flag:'🇪🇸',name:'스페인',lang:'Spanish'},
+  {key:'br',flag:'🇧🇷',name:'브라질',lang:'Portuguese'},
+  {key:'in',flag:'🇮🇳',name:'인도',lang:'English'},
+  {key:'sg',flag:'🇸🇬',name:'싱가포르',lang:'English'},
+  {key:'tw',flag:'🇹🇼',name:'대만',lang:'Chinese'},
+  {key:'ru',flag:'🇷🇺',name:'러시아',lang:'Russian'},
+  {key:'mx',flag:'🇲🇽',name:'멕시코',lang:'Spanish'},
+  {key:'za',flag:'🇿🇦',name:'남아공',lang:'English'},
+  {key:'ae',flag:'🇦🇪',name:'UAE',lang:'Arabic'},
+  {key:'sa',flag:'🇸🇦',name:'사우디아라비아',lang:'Arabic'},
+  {key:'tr',flag:'🇹🇷',name:'터키',lang:'Turkish'},
+  {key:'pl',flag:'🇵🇱',name:'폴란드',lang:'Polish'},
+  {key:'ar',flag:'🇦🇷',name:'아르헨티나',lang:'Spanish'},
+  {key:'nz',flag:'🇳🇿',name:'뉴질랜드',lang:'English'},
+  {key:'th',flag:'🇹🇭',name:'태국',lang:'Thai'},
+  {key:'vn',flag:'🇻🇳',name:'베트남',lang:'Vietnamese'},
+  {key:'id',flag:'🇮🇩',name:'인도네시아',lang:'Indonesian'},
+  {key:'my',flag:'🇲🇾',name:'말레이시아',lang:'Malay'},
+  {key:'ph',flag:'🇵🇭',name:'필리핀',lang:'English'},
+  {key:'eg',flag:'🇪🇬',name:'이집트',lang:'Arabic'},
+  {key:'ng',flag:'🇳🇬',name:'나이지리아',lang:'English'},
+  {key:'ke',flag:'🇰🇪',name:'케냐',lang:'English'},
+  {key:'il',flag:'🇮🇱',name:'이스라엘',lang:'Hebrew'},
+  {key:'pt',flag:'🇵🇹',name:'포르투갈',lang:'Portuguese'},
+  {key:'be',flag:'🇧🇪',name:'벨기에',lang:'French'},
+  {key:'dk',flag:'🇩🇰',name:'덴마크',lang:'Danish'},
+  {key:'no',flag:'🇳🇴',name:'노르웨이',lang:'Norwegian'},
+  {key:'fi',flag:'🇫🇮',name:'핀란드',lang:'Finnish'},
+  {key:'at',flag:'🇦🇹',name:'오스트리아',lang:'German'},
+  {key:'cz',flag:'🇨🇿',name:'체코',lang:'Czech'},
+  {key:'hu',flag:'🇭🇺',name:'헝가리',lang:'Hungarian'},
+  {key:'ro',flag:'🇷🇴',name:'루마니아',lang:'Romanian'},
+  {key:'gr',flag:'🇬🇷',name:'그리스',lang:'Greek'},
+  {key:'hk',flag:'🇭🇰',name:'홍콩',lang:'Chinese'},
+  {key:'cl',flag:'🇨🇱',name:'칠레',lang:'Spanish'},
+  {key:'co',flag:'🇨🇴',name:'콜롬비아',lang:'Spanish'},
+];
+
+// ─── 상태 ───
+let selectedCountries = ['kr','us','eu','jp','uk']; // 기본 선택
+let docs = {};
+let active = new Set(selectedCountries);
+let lastData = null, lastKw = '', currentMode = 'law', currentTopic = 'pharma-law';
+let transFile = null, transResult = '', transTab = 'file';
+let editMode = false;
+let searchSource = 'doc'; // 'doc' | 'web' | 'both'
+
+// ─── 사이드바 탭 ───
+function switchSbTab(tab, el) {
+  document.querySelectorAll('.sb-tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.sb-panel').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('sb-'+tab).classList.add('active');
+}
+
+// ─── API 키 저장 ───
+function saveOrKey(){
+  const v=document.getElementById('or-key-input').value.trim();
+  if(!v){alert('키를 입력해주세요.');return;}
+  OPENROUTER_API_KEY=v;
+  localStorage.setItem('or_api_key',v);
+  const s=document.getElementById('or-key-status');
+  s.textContent='✓ 키 저장됨 — 검색 준비 완료';
+  s.style.background='#E8F5EE';s.style.color='#1A7F4B';
+  document.getElementById('or-key-input').value='';
+}
+
+// ─── 국가 검색 / 드롭다운 ───
+function filterCountries(){
+  const q=document.getElementById('country-search').value.trim().toLowerCase();
+  const dd=document.getElementById('country-dropdown');
+  if(!q){dd.classList.remove('show');return;}
+  const filtered=ALL_COUNTRIES.filter(c=>
+    c.name.toLowerCase().includes(q)||c.key.toLowerCase().includes(q)
+  ).slice(0,12);
+  if(!filtered.length){dd.classList.remove('show');return;}
+  dd.innerHTML=filtered.map(c=>
+    `<div class="country-opt" onclick="addCountry('${c.key}')"><span>${c.flag}</span><span>${c.name}</span><span style="font-size:10px;color:var(--text3);">${c.lang}</span></div>`
+  ).join('');
+  dd.classList.add('show');
+}
+
+function addCountry(key){
+  const c=ALL_COUNTRIES.find(x=>x.key===key);
+  if(!c)return;
+  if(!selectedCountries.includes(key)){
+    selectedCountries.push(key);
+    active.add(key);
+  }
+  document.getElementById('country-search').value='';
+  document.getElementById('country-dropdown').classList.remove('show');
+  renderSelectedCountries();
+  if(lastData)renderResult(lastData,lastKw);
+}
+
+function addCustomCountry(){
+  const val=document.getElementById('country-search').value.trim();
+  if(!val)return;
+  // 기존 국가 검색
+  const found=ALL_COUNTRIES.find(c=>c.name===val||c.key===val.toLowerCase());
+  if(found){addCountry(found.key);return;}
+  // 커스텀 국가
+  const key='custom_'+val.toLowerCase().replace(/\s+/g,'_').slice(0,10)+'_'+Date.now();
+  const custom={key,flag:'🌐',name:val,lang:'',isCustom:true};
+  ALL_COUNTRIES.push(custom);
+  selectedCountries.push(key);
+  active.add(key);
+  document.getElementById('country-search').value='';
+  document.getElementById('country-dropdown').classList.remove('show');
+  renderSelectedCountries();
+}
+
+function removeCountry(key){
+  selectedCountries=selectedCountries.filter(k=>k!==key);
+  active.delete(key);
+  renderSelectedCountries();
+  if(lastData)renderResult(lastData,lastKw);
+}
+
+function renderSelectedCountries(){
+  const el=document.getElementById('selected-countries');
+  if(!selectedCountries.length){
+    el.innerHTML=`<div style="font-size:11px;color:var(--text3);padding:4px 0;">위에서 국가를 검색하여 추가하세요.</div>`;
+    return;
+  }
+  el.innerHTML=selectedCountries.map(key=>{
+    const c=ALL_COUNTRIES.find(x=>x.key===key)||{flag:'🌐',name:key};
+    return`<span class="country-chip">${c.flag} ${c.name}<button onclick="removeCountry('${key}')">×</button></span>`;
+  }).join('');
+}
+
+// 단순 파일 업로드 (국가 무관)
+let uploadedDocs = []; // [{name, text, raw}]
+
+async function handleSimpleFiles(files){
+  for(const f of Array.from(files)){
+    const raw = await f.text();
+    let processed='', lineNum=1, pageNum=1;
+    for(const line of raw.split('\n')){
+      if(line.includes('\f')||line.trim()==='[PAGE]'){pageNum++;processed+=`\n[페이지${pageNum}시작]\n`;}
+      else{processed+=`[L${lineNum}] ${line}\n`;lineNum++;}
+    }
+    // 중복 방지
+    if(!uploadedDocs.find(d=>d.name===f.name)){
+      uploadedDocs.push({name:f.name, text:processed.slice(0,12000), raw});
+    }
+  }
+  renderSimpleFileList();
+}
+
+function removeSimpleDoc(name){
+  uploadedDocs=uploadedDocs.filter(d=>d.name!==name);
+  renderSimpleFileList();
+}
+
+function renderSimpleFileList(){
+  const el=document.getElementById('simple-file-list');
+  if(!uploadedDocs.length){el.innerHTML='';return;}
+  el.innerHTML=uploadedDocs.map(d=>`
+    <div class="simple-file-chip">
+      <span>📄 ${esc(d.name)}</span>
+      <button onclick="removeSimpleDoc('${esc(d.name)}')" title="제거">×</button>
+    </div>`).join('');
+}
+
+// 기존 코드 호환용 (국가별 업로드 흔적 제거)
+function renderDocUpload(){} // 더 이상 사용 안 함
+async function handleFile(){}
+
+// ─── 분석 모드 ───
+const MODE_INFO={
+  'law':{desc:'법령 조문 및 하위규칙·시행령·고시 등을 기준으로 분석합니다.',label:'국가별 법령·규칙 비교 분석',sublabel:'Regulatory Law Comparison'},
+  'inst':{desc:'우대사항·혜택·지원제도·인센티브 등 국가별 제도를 비교합니다.',label:'국가별 제도·정책 비교 분석',sublabel:'Policy & Institution Comparison'},
+  'guide':{desc:'가이드라인·지침·가이던스 문서의 권고사항을 비교합니다.',label:'가이드라인·지침 비교 분석',sublabel:'Guideline & Guidance Comparison'},
+  'free':{desc:'업로드한 어떤 문서든 자유롭게 비교·분석합니다.',label:'자유형식 문서 비교 분석',sublabel:'Free-form Document Comparison'},
+};
+
+function setMode(m){
+  currentMode=m;
+  document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('mode-'+m).classList.add('active');
+  document.getElementById('mode-desc').textContent=MODE_INFO[m].desc;
+  document.getElementById('main-label').textContent=MODE_INFO[m].sublabel;
+  document.getElementById('main-title').innerHTML=MODE_INFO[m].label.replace('비교 분석','<span>비교 분석</span>');
+}
+
+// ─── 주제 선택 ───
+const KW_PRESETS={
+  'pharma-law':['임상시험 승인','GMP 기준','신약 허가','라벨링 요건','희귀의약품'],
+  'pharma-gmp':['제조 시설 기준','품질관리 시스템','실사 절차','일탈 처리','GMP 인증'],
+  'pharma-clinical':['임상 1상 요건','IRB 승인','IND 신청','GCP 기준','시험 중단 기준'],
+  'pharma-label':['표시 기재 사항','용법용량 표기','경고 문구','QR코드 의무','전자라벨'],
+  'pharma-rare':['희귀질환 정의','우선심사 기간','세제혜택','시판 후 의무','지정 요건'],
+  'inst-benefit':['우대사항','인센티브 제도','혜택 범위','지원 요건','적용 기간'],
+  'inst-patent':['특허 존속기간','특허 연장','자료독점권','허가-특허 연계','특허 도전'],
+  'inst-tax':['R&D 세액공제','세제혜택 요건','지원 상한액','신청 절차','지원 대상'],
+  'inst-approval':['심사 기간','우선심사 조건','조건부 허가','가속 경로','심사 수수료'],
+  'guide-safety':['안전성 보고 기준','이상사례 정의','보고 기한','보고 경로','재심사'],
+  'guide-report':['보고 의무 대상','보고서 양식','제출 주기','위반 제재','예외 규정'],
+  'sub-law':['시행규칙 적용','고시 효력','행정규칙 위계','하위법령 위임','개정 절차'],
+  'custom':['키워드를 직접 입력하세요'],
+  'free':['주요 내용 비교','차이점 분석','공통점 분석','적용 범위','특이 사항'],
+};
+
+function onTopicChange(){
+  const v=document.getElementById('topic-preset').value;
+  currentTopic=v;
+  const ci=document.getElementById('topic-custom-input');
+  v==='custom'?ci.classList.add('show'):ci.classList.remove('show');
+  renderKwSamples(v);
+}
+
+function renderKwSamples(topic){
+  const kws=KW_PRESETS[topic]||KW_PRESETS['free'];
+  document.getElementById('kw-samples').innerHTML=kws.map(k=>`<span class="kw" onclick="setKw('${k}')">${k}</span>`).join('');
+}
+
+function setKw(t){document.getElementById('keyword').value=t;}
+
+let searchMode='kw';
+function setSearchMode(m){
+  searchMode=m;
+  const ta=document.getElementById('keyword');
+  const kwBtn=document.getElementById('mode-kw-btn');
+  const qBtn=document.getElementById('mode-q-btn');
+  if(m==='kw'){
+    ta.style.minHeight='48px';ta.placeholder='예: 임상시험 승인 절차, GMP 기준...';
+    kwBtn.style.cssText='font-size:11px;padding:3px 10px;border-radius:20px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer;font-family:var(--font);';
+    qBtn.style.cssText='font-size:11px;padding:3px 10px;border-radius:20px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:pointer;font-family:var(--font);';
+    document.getElementById('search-hint-text').innerHTML='<b>키워드 모드:</b> 핵심 단어 입력 — 엔터로 바로 검색';
+  }else{
+    ta.style.minHeight='100px';ta.placeholder='예: 임상시험 승인 시 IRB 구성요건이 나라별로 어떻게 다른지 알고싶어';
+    qBtn.style.cssText='font-size:11px;padding:3px 10px;border-radius:20px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer;font-family:var(--font);';
+    kwBtn.style.cssText='font-size:11px;padding:3px 10px;border-radius:20px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:pointer;font-family:var(--font);';
+    document.getElementById('search-hint-text').innerHTML='<b>줄글 질문 모드:</b> 궁금한 내용을 자연어로 질문 — Shift+Enter 줄바꿈';
+  }
+}
+
+function getTopicLabel(){
+  const sel=document.getElementById('topic-preset');
+  if(sel.value==='custom') return document.getElementById('topic-custom-input').value||'자유형식 문서';
+  return sel.options[sel.selectedIndex].text;
+}
+
+// ─── 분석 실행 ───
+// ─── 검색 소스 선택 ───
+function setSearchSource(src){
+  searchSource=src;
+  const btns={doc:'src-doc-btn',web:'src-web-btn',both:'src-both-btn'};
+  Object.entries(btns).forEach(([k,id])=>{
+    const el=document.getElementById(id);
+    if(k===src){
+      el.style.border='1.5px solid var(--accent)';
+      el.style.background='var(--accent-bg)';
+      el.querySelector('div:nth-child(2)').style.color='var(--accent)';
+    }else{
+      el.style.border='1.5px solid var(--border2)';
+      el.style.background='var(--surface2)';
+      el.querySelector('div:nth-child(2)').style.color='var(--text2)';
+    }
+  });
+  const hints={
+    doc:'📄 <b style="color:var(--text2);">업로드 문서 우선:</b> 업로드한 파일에서 먼저 찾고, 없으면 AI 지식으로 답합니다.',
+    web:'🌐 <b style="color:var(--text2);">웹 서칭:</b> 실시간으로 인터넷을 검색하여 최신 정보를 가져옵니다.',
+    both:'📄+🌐 <b style="color:var(--text2);">문서+웹 동시:</b> 업로드 문서를 먼저 분석하고, 웹에서도 최신 정보를 보강합니다.',
+  };
+  document.getElementById('search-source-hint').innerHTML=hints[src];
+}
+
+async function doSearch(){
+  if(!OPENROUTER_API_KEY){alert('OpenRouter API 키를 먼저 입력해주세요.\nopenrouter.ai → Keys → Create Key → 무료');return;}
+  const kw=document.getElementById('keyword').value.trim();
+  if(!kw){alert('키워드를 입력해 주세요.');return;}
+  const targets=selectedCountries.map(k=>ALL_COUNTRIES.find(x=>x.key===k)).filter(Boolean);
+  if(!targets.length){alert('비교할 국가를 선택해 주세요.');return;}
+  lastKw=kw;
+  document.getElementById('search-btn').disabled=true;
+  document.getElementById('search-btn').textContent='분석 중...';
+  setLoading();
+
+  try{
+    const topicLabel=getTopicLabel();
+    const hasDoc=uploadedDocs.length>0;
+    const isQuestion=searchMode==='q';
+    const useWeb=searchSource==='web'||searchSource==='both';
+    const useDoc=(searchSource==='doc'||searchSource==='both')&&hasDoc;
+
+    const modePrompt={
+      'law':'법령 조문 및 하위규칙·시행령·고시를 기준으로 분석. 조문 번호와 출처 명시.',
+      'inst':'제도·정책·인센티브·지원사항을 중심으로 실무적 혜택과 요건 비교.',
+      'guide':'가이드라인·지침·가이던스 문서의 권고사항과 적용 범위 비교.',
+      'free':'업로드된 문서 내용을 충실히 반영하여 핵심 내용과 차이점 비교.',
+    }[currentMode]||'';
+
+    // ── STEP 1: 웹 서칭 — 국가별 개별 검색 + citations 추출 ──
+    let webContext='';
+    let webCitations={}; // {countryKey: {content, citations:[url,...]}}
+    let webFailed=false;
+    if(useWeb){
+      updateLoadingMsg('🌐 국가별 공식 법령 검색 중...');
+      for(const c of targets){
+        try{
+          const webResp=await fetch('https://openrouter.ai/api/v1/chat/completions',{
+            method:'POST',
+            headers:{'Content-Type':'application/json','Authorization':'Bearer '+OPENROUTER_API_KEY,'HTTP-Referer':'https://pharma-law-app.vercel.app','X-Title':'Pharma Law Comparator'},
+            body:JSON.stringify({
+              model:'perplexity/sonar',
+              messages:[{role:'user',content:`[업무용 법령 조사] ${c.name}의 "${topicLabel}" 관련 "${kw}" 규정을 검색하세요.
+
+다음 형식으로 답하세요:
+1. 관련 법령명 (정식 명칭)
+2. 핵심 조문/내용 (가능하면 원문 인용)
+3. 출처 URL (반드시 실제 접속 가능한 공식 정부·규제기관 URL만 — 추측 금지)
+4. 최종 개정일 또는 시행일
+
+출처가 확인되지 않는 내용은 반드시 "출처미확인"으로 표기하세요.`}],
+              temperature:0,
+              max_tokens:800
+            })
+          });
+          if(webResp.ok){
+            const webData=await webResp.json();
+            const content=webData.choices[0].message.content;
+            const citations=webData.citations||[];
+            webCitations[c.key]={content,citations};
+            webContext+=`\n\n[${c.name} 웹검색결과]\n${content}\n확인된 공식URL: ${citations.length?citations.join(' | '):'없음'}`;
+          }
+        }catch(e){
+          webCitations[c.key]={content:'검색실패',citations:[]};
+        }
+      }
+      webFailed=Object.values(webCitations).every(v=>v.citations.length===0);
+    }
+
+    // ── STEP 2: 문서 컨텍스트 구성 ──
+    let docCtx='';
+    if(useDoc){
+      docCtx=uploadedDocs.map(d=>`[업로드 문서: ${d.name}]\n${d.text}`).join('\n\n---\n\n');
+    }
+
+    // ── STEP 3: 출처 엄격 지침 ──
+    const citationsByCountry=targets.map(c=>{
+      const v=webCitations[c.key];
+      return v?`${c.name}: ${v.citations.length?v.citations.join(' | '):'검색된 공식URL 없음'}`:'';
+    }).filter(Boolean).join('\n');
+
+    const strictSourceRule=useWeb?`
+【출처 엄격 규칙 — 업무용, 반드시 준수】
+- officialUrl: 아래 "국가별 확인된 URL 목록"에 있는 URL만 사용. 목록에 없으면 반드시 "" (빈 문자열). 절대 추측·생성 금지.
+- 웹검색 결과에 없는 내용을 AI가 추가할 경우 해당 문장 끝에 반드시 [AI추정-검증필요] 표기.
+- verified: 웹검색 URL이 확인되면 true, AI추정이면 반드시 false.
+- sourceType: "web_verified"(웹검색URL확인) / "doc_verified"(업로드문서) / "ai_unverified"(AI추정) 중 하나.
+
+국가별 확인된 공식 URL 목록:
+${citationsByCountry||'(웹검색 URL 없음 — AI추정만 가능, 모든 항목 verified:false 처리)'}
+`:useDoc?`
+【출처 엄격 규칙 — 업무용】
+- 업로드 문서에서 찾은 내용: sourcePage에 파일명+줄번호 필수. verified:true.
+- 문서에 없어 AI 지식으로 보완한 내용: 해당 문장에 [AI추정-검증필요] 표기. verified:false.
+- officialUrl: 확실히 아는 URL만, 모르면 "" 처리. AI가 만들어낸 URL 절대 금지.
+`:`
+【출처 엄격 규칙 — 업무용】
+- 이 답변은 AI 학습 지식 기반입니다. 모든 내용은 반드시 검증이 필요합니다.
+- translatedText 모든 문장 끝에 [AI추정-검증필요] 표기 필수.
+- officialUrl: 확실히 아는 공식 URL만 입력. 모르면 반드시 "" 처리.
+- verified: 모든 항목 false.
+- sourceType: 모든 항목 "ai_unverified".
+`;
+
+    const prompt=`국제 비교 분석 전문가입니다. 업무용 법령 조사입니다. JSON만 반환하세요(마크다운 없이).
+
+주제:"${topicLabel}"
+${isQuestion?'사용자 질문: '+kw:'검색 키워드: '+kw}
+분석 방향: ${modePrompt}
+대상 국가: ${targets.map(c=>c.name).join(', ')}
+
+${strictSourceRule}
+
+${useDoc?`===업로드 문서(1순위)===\n${docCtx}\n`:''}
+${useWeb&&webContext?`===웹 검색 결과(실시간 검색)===\n${webContext}\n`:''}
+
+반환 JSON(반드시 이 구조, 필드 누락 금지):
+{"summary":"국가별 핵심 차이 2-3문장(한국어)","keyDiffs":[{"label":"비교항목","value":"핵심값"}],"results":[{
+  "countryKey":"국가key",
+  "countryName":"국가명",
+  "translatedText":"해당 국가 내용 한국어 3-4문장 ([AI추정-검증필요] 표기 포함)",
+  "originalText":"원문 핵심문장 원어 그대로 (없으면 빈문자열)",
+  "lawName":"정식 법령명 (모르면 빈문자열)",
+  "articleNum":"조문번호 (모르면 빈문자열)",
+  "officialUrl":"확인된 실제 URL만 (모르면 반드시 빈문자열)",
+  "verified":true또는false,
+  "sourceType":"web_verified 또는 doc_verified 또는 ai_unverified",
+  "sourcePage":"문서참고=파일명+페이지 / 웹검색=도메인명 / AI추정=AI추정",
+  "sourceLine":"문서참고시 줄번호, 아니면 해당없음",
+  "sourceParagraph":"핵심어15자이내 또는 해당없음"
+}]}
+
+대상 국가 키: ${targets.map(c=>c.key).join(',')} — 전부 포함 필수.`;
+
+    updateLoadingMsg('📊 비교 분석표 생성 중...');
+    const resp=await fetch('https://openrouter.ai/api/v1/chat/completions',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+OPENROUTER_API_KEY,'HTTP-Referer':'https://pharma-law-app.vercel.app','X-Title':'Pharma Law Comparator'},
+      body:JSON.stringify({model:'google/gemini-2.0-flash-001',messages:[{role:'user',content:prompt}],temperature:0.2,max_tokens:3000})
+    });
+    if(!resp.ok){const e=await resp.json();throw new Error(e.error?.message||'API 오류');}
+    const data=await resp.json();
+    const raw=data.choices[0].message.content.replace(/```json|```/g,'').trim();
+    lastData=JSON.parse(raw);
+    lastData._sourceMeta={useDoc,useWeb,docNames:uploadedDocs.map(d=>d.name),webUsed:!!webContext,webFailed,verifiedCount:Object.values(webCitations).filter(v=>v.citations.length>0).length};
+    renderResult(lastData,kw);
+  }catch(e){
+    document.getElementById('result-area').innerHTML=`<div class="err-box">❌ 오류: ${e.message}<br><small>잠시 후 다시 시도해 주세요.</small></div>`;
+  }finally{
+    document.getElementById('search-btn').disabled=false;
+    document.getElementById('search-btn').textContent='AI 분석 시작';
+    clearInterval(window._li);
+  }
+}
+
+function setLoading(){
+  const msgs=['키워드를 각국 언어로 번역 중...','문서에서 관련 내용 추출 중...','한국어로 번역하는 중...','비교표를 생성하는 중...'];
+  let i=0;
+  document.getElementById('result-area').innerHTML=`<div class="loading-area"><div class="lds"><span></span><span></span><span></span></div><div class="loading-step" id="lstep">${msgs[0]}</div></div>`;
+  clearInterval(window._li);
+  window._li=setInterval(()=>{i=(i+1)%msgs.length;const el=document.getElementById('lstep');if(el)el.textContent=msgs[i];},1600);
+}
+
+function updateLoadingMsg(msg){
+  const el=document.getElementById('lstep');
+  if(el)el.textContent=msg;
+}
+
+// ─── 결과 렌더링 ───
+function toggleEdit(){
+  editMode=!editMode;
+  document.querySelectorAll('.editable').forEach(el=>el.contentEditable=editMode?'true':'false');
+  const btn=document.getElementById('edit-toggle-btn');
+  if(btn){btn.textContent=editMode?'✏️ 편집 중 (클릭하여 종료)':'✏️ 내용 수정하기';btn.className='exp-btn'+(editMode?' edit-on':'');}
+  const badge=document.getElementById('edit-badge');
+  if(badge)badge.style.display=editMode?'inline-flex':'none';
+}
+
+function buildRefCell(r){
+  const isDoc = r.sourceType==='doc_verified' || (r.sourcePage&&r.sourcePage!=='일반지식'&&r.sourcePage!=='일반 지식'&&r.sourcePage!=='AI추정'&&!r.sourcePage.includes('웹'));
+  const isWebVerified = r.sourceType==='web_verified' || (r.verified===true&&r.officialUrl);
+  const isAI = r.sourceType==='ai_unverified' || r.verified===false || (!isDoc&&!isWebVerified);
+  let h='';
+
+  // 신뢰도 배지 (가장 위에 크게)
+  if(isDoc){
+    h+=`<span class="ref-chip" style="background:#E8F5EE;color:#0d6e4f;border-color:#6dbf8a;font-weight:700;font-size:11px;">✅ 업로드 문서 확인됨</span>`;
+  } else if(isWebVerified){
+    h+=`<span class="ref-chip" style="background:#EEF2FD;color:#2D5BE3;border-color:#93aef5;font-weight:700;font-size:11px;">🌐 웹 검색 출처 확인됨</span>`;
+  } else {
+    h+=`<span class="ref-chip" style="background:#FEF3E8;color:#b45309;border-color:#f59e0b;font-weight:700;font-size:11px;">⚠️ AI추정 — 반드시 검증 필요</span>`;
+  }
+
+  // 법령명
+  if(r.lawName){
+    if(isWebVerified&&r.officialUrl){
+      h+=`<a href="${r.officialUrl}" target="_blank" class="ref-chip" style="text-decoration:none;color:#1d4ed8;font-weight:600;background:#dbeafe;border-color:#93c5fd;" title="클릭하여 공식출처 확인">${esc(r.lawName)} 🔗</a>`;
+    } else {
+      h+=`<span class="ref-chip" style="font-weight:600;">${esc(r.lawName)}</span>`;
+    }
+  }
+  if(r.articleNum) h+=`<span class="ref-chip">${esc(r.articleNum)}</span>`;
+
+  // 출처 상세
+  if(isDoc){
+    h+=`<span class="ref-chip" style="background:#E8F5EE;color:#0d6e4f;border-color:#6dbf8a;">📂 ${esc(r.sourcePage)}</span>`;
+    if(r.sourceLine&&r.sourceLine!=='해당없음') h+=`<span class="ref-chip" style="background:#E8F5EE;color:#0d6e4f;border-color:#6dbf8a;">줄 ${esc(r.sourceLine)}</span>`;
+  } else if(isWebVerified&&r.officialUrl){
+    h+=`<a href="${r.officialUrl}" target="_blank" class="ref-chip" style="background:#dbeafe;color:#1d4ed8;border-color:#93c5fd;text-decoration:none;font-weight:600;">🔗 공식출처 바로가기</a>`;
+    h+=`<span class="ref-chip" style="font-size:10px;color:var(--text3);">${esc(r.sourcePage||'')}</span>`;
+  } else {
+    // AI추정 — 경고 강조
+    h+=`<div style="margin-top:6px;padding:8px 10px;background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;">`;
+    h+=`<div style="font-size:10px;font-weight:700;color:#c2410c;margin-bottom:4px;">⚠️ 이 내용은 AI 추정입니다</div>`;
+    h+=`<div style="font-size:10px;color:#7c3aed;line-height:1.6;">업무 활용 전 아래 공식 사이트에서 반드시 직접 확인하세요.</div>`;
+    if(r.officialUrl){
+      h+=`<a href="${r.officialUrl}" target="_blank" style="display:inline-block;margin-top:4px;font-size:10px;color:#1d4ed8;text-decoration:underline;">🔗 ${esc(r.officialUrl)}</a>`;
+    } else {
+      h+=`<div style="font-size:10px;color:#9ca3af;margin-top:3px;">확인된 공식 URL 없음 — 직접 검색 필요</div>`;
+    }
+    h+=`</div>`;
+  }
+  return h;
+}
+
+function renderResult(data,kw){
+  clearInterval(window._li);
+  const rows=(data.results||[]).filter(r=>selectedCountries.includes(r.countryKey));
+  const now=new Date().toLocaleDateString('ko-KR');
+  const topic=getTopicLabel();
+
+  const diffHtml=data.keyDiffs?.length?`<div class="diff-grid">${data.keyDiffs.map(d=>`<div class="diff-card"><div class="diff-lbl">${esc(d.label)}</div><div class="diff-val">${esc(d.value)}</div></div>`).join('')}</div>`:'';
+
+  const lawRows=rows.map(r=>{
+    const c=ALL_COUNTRIES.find(x=>x.key===r.countryKey)||{flag:'🌐',name:r.countryName||r.countryKey};
+    const isVerified=r.verified===true||(r.sourceType&&r.sourceType!=='ai_unverified');
+    const isAI=r.sourceType==='ai_unverified'||r.verified===false;
+    const verifiedBadge=isVerified
+      ?`<span style="font-size:10px;font-weight:700;color:#0d6e4f;background:#E8F5EE;border:1px solid #6dbf8a;padding:1px 6px;border-radius:10px;">✅ 출처확인</span>`
+      :`<span style="font-size:10px;font-weight:700;color:#b45309;background:#fff7ed;border:1px solid #f59e0b;padding:1px 6px;border-radius:10px;">⚠️ AI추정-검증필요</span>`;
+    return`<tr>
+      <td style="width:30%;font-size:12px;line-height:1.8;">
+        <div style="font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:5px;"><span class="cpill">${c.flag} ${c.name}</span>${verifiedBadge}</div>
+        <div class="editable" data-field="law-${c.key}">${esc(r.translatedText||'')}</div>
+      </td>
+      <td style="width:30%;font-size:12px;line-height:1.8;">
+        <div style="font-size:10px;font-weight:600;color:var(--text3);margin-bottom:4px;">${esc(r.lawName||'')} ${esc(r.articleNum||'')}</div>
+        <div class="editable orig-box" data-field="orig-${c.key}" style="background:transparent;padding:0;">${esc(r.originalText||'—')}</div>
+      </td>
+      <td style="width:40%;font-size:12px;line-height:1.8;">
+        <div>${buildRefCell(r)}</div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  const rptSections=rows.map((r,i)=>{
+    const c=ALL_COUNTRIES.find(x=>x.key===r.countryKey)||{flag:'🌐',name:r.countryName||r.countryKey};
+    const isVerified=r.verified===true||(r.sourceType&&r.sourceType!=='ai_unverified');
+    const isAI=r.sourceType==='ai_unverified'||r.verified===false;
+    const warnBox=isAI?`<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;padding:7px 10px;margin-top:6px;font-size:11px;color:#b45309;"><b>⚠️ AI 추정 내용 — 업무 활용 전 반드시 공식 출처에서 검증하세요.</b>${r.officialUrl?`<br><a href="${r.officialUrl}" target="_blank" style="color:#1d4ed8;">🔗 ${esc(r.officialUrl)}</a>`:' 확인된 공식 URL 없음.'}</div>`:'';
+    return`<div class="rpt-section">
+      <div class="rpt-section-num editable" data-field="rpt-title-${c.key}">${i+1}. ${c.flag} ${c.name} — ${esc(r.lawName||topic)} ${isVerified?'[출처확인]':'[AI추정-검증필요]'}</div>
+      <div class="rpt-item">
+        <div class="editable" data-field="rpt-body-${c.key}">${esc(r.translatedText||'')}</div>
+        ${r.originalText?`<div class="rpt-sub" style="margin-top:4px;font-style:italic;color:var(--text3);">[원문] <span class="editable" data-field="rpt-orig-${c.key}">${esc(r.originalText)}</span></div>`:''}
+        <div class="rpt-sub" style="margin-top:4px;">${r.articleNum?`<span style="font-weight:500;">${esc(r.articleNum)}</span> · `:''}${esc(r.sourcePage||'')}${r.sourceLine&&r.sourceLine!=='해당없음'?' 줄'+esc(r.sourceLine):''}</div>
+        ${r.officialUrl&&!isAI?`<div class="rpt-sub"><a href="${r.officialUrl}" target="_blank" style="color:#1d4ed8;text-decoration:none;">🔗 ${esc(r.officialUrl)}</a></div>`:''}
+        ${warnBox}
+      </div>
+    </div>`;
+  }).join('');
+
+  const meta=data._sourceMeta||{};
+  const srcBadges=[];
+  if(meta.useDoc&&meta.docNames?.length) srcBadges.push(`<span style="font-size:11px;padding:3px 9px;border-radius:20px;background:#E8F5EE;color:#0d6e4f;border:1px solid #a7dfc5;">📄 ${meta.docNames.join(', ')}</span>`);
+  if(meta.useWeb){
+    const wLabel=meta.webFailed?'🌐 웹서칭 (공식URL 미확인)':`🌐 웹서칭 적용 (${meta.verifiedCount||0}개국 URL 확인)`;
+    const wColor=meta.webFailed?'#b45309':'var(--accent)';
+    const wBg=meta.webFailed?'#fff7ed':'var(--accent-bg)';
+    const wBorder=meta.webFailed?'#f59e0b':'var(--accent-border)';
+    srcBadges.push(`<span style="font-size:11px;padding:3px 9px;border-radius:20px;background:${wBg};color:${wColor};border:1px solid ${wBorder};">${wLabel}</span>`);
+  }
+  if(!meta.useDoc&&!meta.useWeb) srcBadges.push(`<span style="font-size:11px;padding:3px 9px;border-radius:20px;background:#fff7ed;color:#b45309;border:1px solid #f59e0b;">⚠️ AI 지식 기반 — 모든 내용 검증 필요</span>`);
+
+  document.getElementById('result-area').innerHTML=`
+    <div class="result-bar">
+      <div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;">
+        <div class="result-kw">"<em>${esc(kw)}</em>" 분석 결과</div>
+        <span class="edit-badge" id="edit-badge" style="display:none;">편집 모드</span>
+      </div>
+      <div class="exp-row">
+        <button class="exp-btn" id="edit-toggle-btn" onclick="toggleEdit()">✏️ 내용 수정하기</button>
+        <button class="exp-btn" onclick="exportWord()">📄 Word 보고서</button>
+        <button class="exp-btn" onclick="exportHwpx()">📝 한글 보고서</button>
+        <button class="exp-btn" onclick="exportPDF()">🖨️ PDF 출력</button>
+      </div>
+    </div>
+    ${srcBadges.length?`<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px;">${srcBadges.join('')}<span style="font-size:11px;color:var(--text3);padding:3px 0;">기반으로 분석 · 비교 국가: ${rows.map(r=>{const c=ALL_COUNTRIES.find(x=>x.key===r.countryKey)||{flag:'🌐',name:r.countryName||r.countryKey};return c.flag+c.name;}).join(' ')}</span></div>`:''}
+    ${data.summary?`<div class="ai-sum"><div class="ai-sum-lbl"><span class="ai-dot"></span> AI 요약</div><div class="ai-sum-body editable" data-field="summary">${esc(data.summary)}</div></div>`:''}
+    ${diffHtml}
+    <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;margin-top:1rem;">법령 비교표</div>
+    <div class="law-report">
+      <div class="law-report-header">
+        <div class="law-report-title editable" data-field="law-title">${esc(topic)} 비교 분석</div>
+        <div class="law-report-meta editable" data-field="law-meta">${now} · OpenRouter AI 분석 · 비교 국가: ${rows.map(r=>{const c=ALL_COUNTRIES.find(x=>x.key===r.countryKey)||{name:r.countryName||r.countryKey};return c.name;}).join(', ')}</div>
+      </div>
+      <table class="law-tbl">
+        <thead><tr><th>국가별 법령 · 한국어 분석</th><th>원문 조항</th><th>출처 · 참고</th></tr></thead>
+        <tbody>${lawRows||'<tr><td colspan="3" style="padding:2rem;text-align:center;color:var(--text3)">결과 없음</td></tr>'}</tbody>
+      </table>
+    </div>
+    <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;margin-top:1.5rem;">보고서 형식</div>
+    <div class="rpt-wrap">
+      <div class="rpt-meta editable" data-field="rpt-meta">${now}. 분석기관: AI 분석 | 비교 국가: ${rows.map(r=>{const c=ALL_COUNTRIES.find(x=>x.key===r.countryKey)||{name:r.countryName||r.countryKey};return c.name;}).join(', ')}</div>
+      <div class="rpt-title editable" data-field="rpt-title">${esc(topic)} 국가별 비교 분석 보고서</div>
+      ${data.summary?`<div class="rpt-section"><div class="rpt-section-num">개요</div><div class="rpt-item editable" data-field="rpt-summary">${esc(data.summary)}</div></div>`:''}
+      ${rptSections}
+    </div>`;
+  editMode=false;
+}
+
+// ─── Word 내보내기 ───
+function getResultRows(){
+  return(lastData?.results||[]).filter(r=>selectedCountries.includes(r.countryKey)).map(r=>{
+    const c=ALL_COUNTRIES.find(x=>x.key===r.countryKey)||{flag:'🌐',name:r.countryName||r.countryKey};
+    return{country:`${c.flag} ${c.name}`,translated:r.translatedText||'',original:r.originalText||'',law:r.lawName||'',article:r.articleNum||'',page:r.sourcePage||'',line:r.sourceLine||'',url:r.officialUrl||''};
+  });
+}
+
+function exportWord(){
+  if(!lastData){alert('먼저 분석을 실행하세요.');return;}
+  const now=new Date().toLocaleDateString('ko-KR');
+  const rows=getResultRows();
+  const topic=getTopicLabel();
+  const wordHtml=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="UTF-8"><style>
+@page{size:A4 landscape;margin:1.5cm;}
+body{font-family:'맑은 고딕','Noto Sans KR',sans-serif;font-size:10pt;color:#1A1916;}
+h1{font-size:16pt;color:#2D5BE3;border-bottom:2pt solid #2D5BE3;padding-bottom:4pt;margin-bottom:6pt;}
+h2{font-size:12pt;color:#1A1916;margin-top:12pt;margin-bottom:4pt;}
+.meta{font-size:9pt;color:#888;margin-bottom:12pt;}
+.summary{background:#EEF2FD;border-left:4pt solid #2D5BE3;padding:8pt 10pt;margin-bottom:12pt;font-size:10pt;line-height:1.6;}
+table{border-collapse:collapse;width:100%;margin-top:8pt;}
+th{background:#2D5BE3;color:#fff;padding:6pt 8pt;font-size:9pt;text-align:left;border:1pt solid #2D5BE3;}
+td{padding:6pt 8pt;border:1pt solid #E2DED6;vertical-align:top;font-size:9pt;line-height:1.6;}
+tr:nth-child(even) td{background:#F7F6F2;}
+</style></head><body>
+<h1>${esc(topic)} 비교 분석 보고서</h1>
+<div class="meta">검색: <b>${esc(lastKw)}</b> &nbsp;|&nbsp; 생성일: ${esc(now)} &nbsp;|&nbsp; 비교 국가: ${rows.map(r=>r.country).join(', ')}</div>
+${lastData.summary?`<div class="summary"><b>AI 요약:</b> ${esc(lastData.summary)}</div>`:''}
+<h2>국가별 비교표</h2>
+<table>
+<thead><tr><th>국가</th><th>한국어 번역·분석</th><th>원문 조항</th><th>출처</th></tr></thead>
+<tbody>${rows.map(r=>`<tr><td><b>${esc(r.country)}</b></td><td>${esc(r.translated)}</td><td style="font-family:monospace;font-size:8pt;">${esc(r.original)}</td><td>${esc(r.law)}<br>${esc(r.article)}<br><span style="font-size:8pt;color:#888;">${r.page}</span></td></tr>`).join('')}
+</tbody></table>
+</body></html>`;
+  dl(new Blob(['﻿'+wordHtml],{type:'application/msword'}),`비교분석_${lastKw.slice(0,15)}_${now}.doc`);
+}
+
+// ─── HWPX 내보내기 ───
+async function exportHwpx(){
+  if(!lastData){alert('먼저 분석을 실행하세요.');return;}
+  const now=new Date().toLocaleDateString('ko-KR');
+  const rows=getResultRows();
+  const topic=getTopicLabel();
+  const lines=[];
+  lines.push(`${topic} 비교 분석 보고서`,'',`생성일: ${now} | 비교 국가: ${rows.map(r=>r.country).join(', ')}`,'');
+  if(lastData.summary){lines.push('[AI 요약]',lastData.summary,'');}
+  rows.forEach((r,i)=>{
+    lines.push(`${i+1}. ${r.country} — ${r.law||topic}`,'');
+    lines.push(r.translated,'');
+    if(r.original){lines.push(`[원문] ${r.original}`,'');}
+    lines.push(`출처: ${r.page} | ${r.article}`,r.url?`공식사이트: ${r.url}`:'','---','');
+  });
+  const text=lines.join('\n');
+  try{
+    const zip=new JSZip();
+    zip.file('mimetype','application/hwp+zip',{compression:'STORE'});
+    const metaInf=zip.folder('META-INF');
+    metaInf.file('container.xml',`<?xml version="1.0" encoding="UTF-8"?><container><rootfiles><rootfile full-path="Contents/content.hpf" media-type="application/hwpml+xml"/></rootfiles></container>`);
+    zip.file('version.xml',`<?xml version="1.0" encoding="UTF-8"?><ver:version xmlns:ver="http://www.hancom.co.kr/hwpml/2011/version" major="5" minor="1" micro="0.0"/>`);
+    let paraId=1000000002,paragraphs='';
+    paragraphs+=`<hp:p id="1000000001" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0"><hp:run charPrIDRef="0"><hp:t/></hp:run></hp:p>\n`;
+    for(const line of text.split('\n')){
+      const t=line.trim().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+      if(!t){paragraphs+=`<hp:p id="${paraId++}" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0"><hp:run charPrIDRef="0"><hp:t/></hp:run></hp:p>\n`;}
+      else{const bold=line.startsWith('#')||line.match(/^\d+\./)?'1':'0';paragraphs+=`<hp:p id="${paraId++}" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0"><hp:run charPrIDRef="${bold}"><hp:t>${t}</hp:t></hp:run></hp:p>\n`;}
+    }
+    const section0=`<?xml version="1.0" encoding="UTF-8"?><hs:sec xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph" xmlns:hs="http://www.hancom.co.kr/hwpml/2011/section">${paragraphs}</hs:sec>`;
+    const header=`<?xml version="1.0" encoding="UTF-8"?><hh:head xmlns:hh="http://www.hancom.co.kr/hwpml/2011/head" version="5.1.0.0"><hh:beginNum page="1" footnote="1" endnote="1" pic="1" tbl="1" equation="1"/><hh:refList><hh:fontfaces itemCnt="2"><hh:fontface lang="HANGUL" fontCnt="1"><hh:font id="0" face="함초롬바탕" type="TTF" isEmbedded="0"/></hh:fontface><hh:fontface lang="LATIN" fontCnt="1"><hh:font id="0" face="함초롬바탕" type="TTF" isEmbedded="0"/></hh:fontface></hh:fontfaces><hh:borderFills itemCnt="1"><hh:borderFill id="1" threeD="0" shadow="0" centerLine="0" breakCellSeparateLine="0"><hh:slash type="NONE" Crooked="0" isCounter="0"/><hh:backSlash type="NONE" Crooked="0" isCounter="0"/><hh:leftBorder type="NONE" width="0.1mm" color="#000000"/><hh:rightBorder type="NONE" width="0.1mm" color="#000000"/><hh:topBorder type="NONE" width="0.1mm" color="#000000"/><hh:bottomBorder type="NONE" width="0.1mm" color="#000000"/><hh:diagonal type="NONE" width="0.1mm" color="#000000"/><hh:fillInfo><hh:noFill/></hh:fillInfo></hh:borderFill></hh:borderFills><hh:charProperties itemCnt="2"><hh:charPr id="0" height="1000" textColor="#000000" shadeColor="#FFFFFF" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="1"><hh:fontRef hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/><hh:ratio hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/><hh:spacing hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/><hh:relSz hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/><hh:offset hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/></hh:charPr><hh:charPr id="1" height="1200" textColor="#000000" shadeColor="#FFFFFF" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="1"><hh:fontRef hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/><hh:ratio hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/><hh:spacing hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/><hh:relSz hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/><hh:offset hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/><hh:bold/></hh:charPr></hh:charProperties><hh:paraProperties itemCnt="1"><hh:paraPr id="0" tabIDRef="0" condense="0" fontLineHeight="0" snapToGrid="0" suppressLineNumbers="0" checked="0"><hh:align horizontal="JUSTIFY" vertical="BASELINE"/><hh:heading type="NONE" idRef="0" level="0"/><hh:breakSetting breakLatinWord="KEEP_WORD" breakNonLatinWord="BREAK_ALL" widowOrphan="0" keepWithNext="0" keepLines="0" pageBreakBefore="0" columnBreakBefore="0"/><hh:autoSpacing eAsianEng="0" eAsianNum="0"/><hh:margin intent="0" left="0" right="0" prev="0" next="0"/><hh:lineSpacing type="RATIO" value="160"/></hh:paraPr></hh:paraProperties></hh:refList></hh:head>`;
+    const contentHpf=`<?xml version="1.0" encoding="UTF-8"?><hpf:package xmlns:hpf="http://www.hancom.co.kr/hwpml/2011/package"><hpf:manifest><hpf:item id="header" href="Contents/header.xml" media-type="application/xml"/><hpf:item id="section0" href="Contents/section0.xml" media-type="application/xml"/></hpf:manifest><hpf:spine itemref="header section0"/></hpf:package>`;
+    const contents=zip.folder('Contents');
+    contents.file('header.xml',header);
+    contents.file('section0.xml',section0);
+    contents.file('content.hpf',contentHpf);
+    const blob=await zip.generateAsync({type:'blob',mimeType:'application/hwp+zip',compression:'DEFLATE',compressionOptions:{level:6}});
+    dl(blob,`비교분석_${lastKw.slice(0,15)}_${now}.hwpx`);
+  }catch(e){alert('HWPX 생성 실패: '+e.message);}
+}
+
+// ─── PDF ───
+function exportPDF(){
+  if(!lastData){alert('먼저 분석을 실행하세요.');return;}
+  const now=new Date().toLocaleDateString('ko-KR');
+  const rows=getResultRows();
+  const topic=getTopicLabel();
+  const w=window.open('','_blank');
+  w.document.write(`<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><title>${topic} 보고서</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<style>body{font-family:'Noto Sans KR',sans-serif;max-width:1100px;margin:40px auto;padding:0 24px;color:#1A1916;}
+h1{font-size:22px;color:#2D5BE3;border-bottom:2px solid #E2DED6;padding-bottom:10px;}
+.meta{color:#9B9890;font-size:12px;margin-bottom:1.5rem;}
+.summary{background:#EEF2FD;border-left:4px solid #2D5BE3;padding:1rem 1.25rem;border-radius:0 8px 8px 0;margin-bottom:1.5rem;font-size:13px;line-height:1.85;}
+table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #E2DED6;margin-bottom:2rem;}
+th{background:#2D5BE3;color:#fff;padding:9px 12px;font-size:11px;text-align:left;}
+td{padding:11px 12px;border-bottom:1px solid #E2DED6;vertical-align:top;font-size:12px;line-height:1.8;}
+.orig{font-family:monospace;font-size:11px;background:#F0EEE8;padding:6px 8px;border-radius:5px;}
+@media print{body{max-width:100%;}@page{margin:1.5cm;size:A4 landscape;}}</style></head><body>
+<h1>${esc(topic)} 비교 분석 보고서</h1>
+<div class="meta">검색: <b>${esc(lastKw)}</b> | 생성일: ${now} | 비교 국가: ${rows.map(r=>r.country).join(' · ')}</div>
+${lastData.summary?`<div class="summary"><b>AI 요약:</b> ${esc(lastData.summary)}</div>`:''}
+<table><thead><tr><th>국가</th><th>한국어 번역·분석</th><th>원문 내용</th><th>출처</th></tr></thead>
+<tbody>${rows.map(r=>`<tr><td><b>${esc(r.country)}</b></td><td>${esc(r.translated)}</td><td><div class="orig">${esc(r.original)}</div></td><td style="font-size:11px;">${esc(r.law)}<br>${esc(r.article)}<br><span style="color:#888;">${esc(r.page)}</span></td></tr>`).join('')}</tbody>
+</table></body></html>`);
+  w.document.close();
+  setTimeout(()=>w.print(),900);
+}
+
+// ─── 번역 기능 ───
+function switchTransTab(tab, el){
+  transTab=tab;
+  document.querySelectorAll('.trans-tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('trans-file-panel').style.display=tab==='file'?'block':'none';
+  document.getElementById('trans-url-panel').style.display=tab==='url'?'block':'none';
+  document.getElementById('trans-text-panel').style.display=tab==='text'?'block':'none';
+}
+
+function handleTransFile(f){
+  if(!f)return;
+  transFile=f;
+  const size=f.size>1048576?(f.size/1048576).toFixed(1)+'MB':(f.size/1024).toFixed(0)+'KB';
+  document.getElementById('trans-file-badge').style.display='block';
+  document.getElementById('trans-file-badge').innerHTML=`<div class="trans-file-chip"><span>📄 ${esc(f.name)}</span><span style="font-size:10px;color:var(--text3);">${size}</span><button onclick="clearTransFile()">×</button></div>`;
+}
+
+function clearTransFile(){
+  transFile=null;
+  document.getElementById('trans-file-badge').style.display='none';
+  document.getElementById('trans-file-input').value='';
+}
+
+async function doTranslate(){
+  if(!OPENROUTER_API_KEY){alert('OpenRouter API 키를 먼저 입력해주세요.');return;}
+  const srcLang=document.getElementById('trans-src-lang').value;
+  let rawText='';
+  try{
+    if(transTab==='file'){
+      if(!transFile){alert('파일을 선택해주세요.');return;}
+      rawText=await transFile.text();
+    }else if(transTab==='url'){
+      const url=document.getElementById('trans-url-input').value.trim();
+      if(!url){alert('URL을 입력해주세요.');return;}
+      document.getElementById('trans-btn').textContent='URL 가져오는 중...';
+      document.getElementById('trans-btn').disabled=true;
+      const proxy='https://api.allorigins.win/get?url='+encodeURIComponent(url);
+      const r=await fetch(proxy,{signal:AbortSignal.timeout(10000)});
+      const data=await r.json();
+      const doc=new DOMParser().parseFromString(data.contents||'','text/html');
+      doc.querySelectorAll('script,style,nav,footer,header,aside').forEach(el=>el.remove());
+      rawText=(doc.body?.innerText||'').replace(/\s{3,}/g,'\n\n').trim();
+    }else{
+      rawText=document.getElementById('trans-text-input').value.trim();
+      if(!rawText){alert('텍스트를 입력해주세요.');return;}
+    }
+    if(!rawText||rawText.length<5){alert('내용을 읽을 수 없습니다.');return;}
+    document.getElementById('trans-btn').textContent='번역 중...';
+    document.getElementById('trans-btn').disabled=true;
+    document.getElementById('trans-result-area').style.display='none';
+
+    // 분할 처리 (6000자씩)
+    const chunks=[];
+    for(let i=0;i<rawText.length;i+=6000)chunks.push(rawText.slice(i,i+6000));
+    const results=[];
+    for(let i=0;i<chunks.length;i++){
+      document.getElementById('trans-btn').textContent=`번역 중... (${i+1}/${chunks.length})`;
+      const langNote=srcLang?`원본 언어: ${srcLang}. `:'';
+      const resp=await fetch('https://openrouter.ai/api/v1/chat/completions',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+OPENROUTER_API_KEY,'HTTP-Referer':'https://pharma-law-app.vercel.app','X-Title':'Pharma Law Comparator'},
+        body:JSON.stringify({model:'google/gemini-2.0-flash-001',messages:[{role:'user',content:`${langNote}아래 텍스트를 자연스러운 한국어로 번역해주세요. 원문의 구조와 형식을 유지하고, 번역문만 출력하세요.\n\n---\n\n${chunks[i]}`}],temperature:0.1,max_tokens:4000})
+      });
+      if(!resp.ok){const e=await resp.json();throw new Error(e.error?.message||'번역 API 오류');}
+      const data=await resp.json();
+      results.push(data.choices[0].message.content);
+    }
+    transResult=results.join('\n\n');
+    document.getElementById('trans-result-text').textContent=transResult;
+    document.getElementById('trans-result-area').style.display='block';
+  }catch(e){
+    alert('번역 오류: '+e.message);
+  }finally{
+    document.getElementById('trans-btn').textContent='🌐 한국어로 번역';
+    document.getElementById('trans-btn').disabled=false;
+  }
+}
+
+async function transDownload(fmt){
+  if(!transResult){alert('번역 결과가 없습니다.');return;}
+  const now=new Date().toISOString().slice(0,10);
+  if(fmt==='txt'){
+    dl(new Blob([transResult],{type:'text/plain;charset=utf-8'}),'번역결과_'+now+'.txt');
+  }else if(fmt==='docx'){
+    const wordHtml=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="UTF-8"><style>body{font-family:'맑은 고딕',sans-serif;font-size:11pt;line-height:1.8;margin:2cm;}p{margin-bottom:6pt;}</style></head>
+<body>${transResult.split('\n').map(l=>`<p>${esc(l)||'&nbsp;'}</p>`).join('')}</body></html>`;
+    dl(new Blob(['﻿'+wordHtml],{type:'application/msword'}),'번역결과_'+now+'.doc');
+  }else if(fmt==='hwpx'){
+    try{
+      const zip=new JSZip();
+      zip.file('mimetype','application/hwp+zip',{compression:'STORE'});
+      const metaInf=zip.folder('META-INF');
+      metaInf.file('container.xml',`<?xml version="1.0" encoding="UTF-8"?><container><rootfiles><rootfile full-path="Contents/content.hpf" media-type="application/hwpml+xml"/></rootfiles></container>`);
+      zip.file('version.xml',`<?xml version="1.0" encoding="UTF-8"?><ver:version xmlns:ver="http://www.hancom.co.kr/hwpml/2011/version" major="5" minor="1" micro="0.0"/>`);
+      let paraId=1000000002,paragraphs=`<hp:p id="1000000001" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0"><hp:run charPrIDRef="0"><hp:t/></hp:run></hp:p>\n`;
+      for(const line of transResult.split('\n')){
+        const t=line.trim().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        if(!t)paragraphs+=`<hp:p id="${paraId++}" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0"><hp:run charPrIDRef="0"><hp:t/></hp:run></hp:p>\n`;
+        else paragraphs+=`<hp:p id="${paraId++}" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0"><hp:run charPrIDRef="0"><hp:t>${t}</hp:t></hp:run></hp:p>\n`;
+      }
+      const section0=`<?xml version="1.0" encoding="UTF-8"?><hs:sec xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph" xmlns:hs="http://www.hancom.co.kr/hwpml/2011/section">${paragraphs}</hs:sec>`;
+      const header=`<?xml version="1.0" encoding="UTF-8"?><hh:head xmlns:hh="http://www.hancom.co.kr/hwpml/2011/head" version="5.1.0.0"><hh:beginNum page="1" footnote="1" endnote="1" pic="1" tbl="1" equation="1"/><hh:refList><hh:fontfaces itemCnt="2"><hh:fontface lang="HANGUL" fontCnt="1"><hh:font id="0" face="함초롬바탕" type="TTF" isEmbedded="0"/></hh:fontface><hh:fontface lang="LATIN" fontCnt="1"><hh:font id="0" face="함초롬바탕" type="TTF" isEmbedded="0"/></hh:fontface></hh:fontfaces><hh:borderFills itemCnt="1"><hh:borderFill id="1" threeD="0" shadow="0" centerLine="0" breakCellSeparateLine="0"><hh:slash type="NONE" Crooked="0" isCounter="0"/><hh:backSlash type="NONE" Crooked="0" isCounter="0"/><hh:leftBorder type="NONE" width="0.1mm" color="#000000"/><hh:rightBorder type="NONE" width="0.1mm" color="#000000"/><hh:topBorder type="NONE" width="0.1mm" color="#000000"/><hh:bottomBorder type="NONE" width="0.1mm" color="#000000"/><hh:diagonal type="NONE" width="0.1mm" color="#000000"/><hh:fillInfo><hh:noFill/></hh:fillInfo></hh:borderFill></hh:borderFills><hh:charProperties itemCnt="1"><hh:charPr id="0" height="1000" textColor="#000000" shadeColor="#FFFFFF" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="1"><hh:fontRef hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/><hh:ratio hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/><hh:spacing hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/><hh:relSz hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/><hh:offset hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/></hh:charPr></hh:charProperties><hh:paraProperties itemCnt="1"><hh:paraPr id="0" tabIDRef="0" condense="0" fontLineHeight="0" snapToGrid="0" suppressLineNumbers="0" checked="0"><hh:align horizontal="JUSTIFY" vertical="BASELINE"/><hh:heading type="NONE" idRef="0" level="0"/><hh:breakSetting breakLatinWord="KEEP_WORD" breakNonLatinWord="BREAK_ALL" widowOrphan="0" keepWithNext="0" keepLines="0" pageBreakBefore="0" columnBreakBefore="0"/><hh:autoSpacing eAsianEng="0" eAsianNum="0"/><hh:margin intent="0" left="0" right="0" prev="0" next="0"/><hh:lineSpacing type="RATIO" value="160"/></hh:paraPr></hh:paraProperties></hh:refList></hh:head>`;
+      const contentHpf=`<?xml version="1.0" encoding="UTF-8"?><hpf:package xmlns:hpf="http://www.hancom.co.kr/hwpml/2011/package"><hpf:manifest><hpf:item id="header" href="Contents/header.xml" media-type="application/xml"/><hpf:item id="section0" href="Contents/section0.xml" media-type="application/xml"/></hpf:manifest><hpf:spine itemref="header section0"/></hpf:package>`;
+      const contents=zip.folder('Contents');
+      contents.file('header.xml',header);
+      contents.file('section0.xml',section0);
+      contents.file('content.hpf',contentHpf);
+      const blob=await zip.generateAsync({type:'blob',mimeType:'application/hwp+zip',compression:'DEFLATE',compressionOptions:{level:6}});
+      dl(blob,'번역결과_'+now+'.hwpx');
+    }catch(e){alert('HWPX 생성 실패: '+e.message);}
+  }
+}
+
+function dl(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),10000);}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+// ─── 초기화 ───
+(function init(){
+  const savedKey=localStorage.getItem('or_api_key');
+  if(savedKey){
+    OPENROUTER_API_KEY=savedKey;
+    document.getElementById('or-key-status').textContent='✓ 키 저장됨 — 검색 준비 완료';
+    document.getElementById('or-key-status').style.background='#E8F5EE';
+    document.getElementById('or-key-status').style.color='#1A7F4B';
+  }
+  setMode('law');
+  document.getElementById('mode-desc').textContent=MODE_INFO['law'].desc;
+  renderSelectedCountries();
+  renderKwSamples('pharma-law');
+  // 드롭다운 바깥 클릭 시 닫기
+  document.addEventListener('click',e=>{
+    if(!e.target.closest('.country-add-area'))document.getElementById('country-dropdown').classList.remove('show');
+  });
+})();
+</script>
+</body>
+</html>
