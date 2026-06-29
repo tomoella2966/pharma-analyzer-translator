@@ -267,6 +267,10 @@ table.rtbl tr:hover td{background:#FAFAF8;}
         <span style="font-size:10px;color:var(--text3);">TXT · HTML · MD · PDF(텍스트) · 여러 파일 동시 가능</span>
       </div>
       <input type="file" id="simple-file-input" accept=".txt,.html,.htm,.md,.pdf,.docx,.rtf,.xml" multiple onchange="handleSimpleFiles(this.files)">
+      <button onclick="openGDrivePicker('analyze')" style="width:100%;margin-top:6px;padding:8px;border:1px solid #4285f4;border-radius:var(--r);background:#fff;color:#4285f4;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font);display:flex;align-items:center;justify-content:center;gap:6px;transition:all .15s;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6.5 20L2 12l4.5-8h11L22 12l-4.5 8z" fill="#4285f4" opacity=".3"/><path d="M2 12l4.5 8h11L22 12" stroke="#4285f4" stroke-width="1.5" fill="none"/><path d="M6.5 4L12 14l5.5-10" stroke="#34a853" stroke-width="1.5" fill="none"/><path d="M2 12h20" stroke="#ea4335" stroke-width="1.5"/></svg>
+        구글 드라이브에서 가져오기
+      </button>
       <div id="simple-file-list" style="display:flex;flex-direction:column;gap:4px;margin-top:6px;"></div>
       <div style="font-size:10px;color:var(--text3);margin-top:6px;line-height:1.6;">업로드한 문서를 AI가 분석에 참고합니다.<br>문서 없이도 AI 지식으로 분석 가능합니다.</div>
     </div>
@@ -318,6 +322,10 @@ table.rtbl tr:hover td{background:#FAFAF8;}
           📁 클릭하거나 파일을 드래그<br><span style="font-size:11px;color:var(--text3);">TXT · HTML · MD · DOCX</span>
         </div>
         <input type="file" id="trans-file-input" accept=".txt,.html,.htm,.md,.docx,.rtf,.xml" onchange="handleTransFile(this.files[0])">
+        <button onclick="openGDrivePicker('translate')" style="width:100%;margin-top:6px;padding:8px;border:1px solid #4285f4;border-radius:var(--r);background:#fff;color:#4285f4;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font);display:flex;align-items:center;justify-content:center;gap:6px;transition:all .15s;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6.5 20L2 12l4.5-8h11L22 12l-4.5 8z" fill="#4285f4" opacity=".3"/><path d="M2 12l4.5 8h11L22 12" stroke="#4285f4" stroke-width="1.5" fill="none"/><path d="M6.5 4L12 14l5.5-10" stroke="#34a853" stroke-width="1.5" fill="none"/><path d="M2 12h20" stroke="#ea4335" stroke-width="1.5"/></svg>
+          구글 드라이브에서 가져오기
+        </button>
         <div id="trans-file-badge" style="display:none;margin-top:6px;"></div>
       </div>
       <div id="trans-url-panel" style="display:none;">
@@ -864,7 +872,7 @@ ${useWeb&&webContext?`===웹 검색 결과(실시간 검색)===\n${webContext}\n
     const resp=await fetch('https://openrouter.ai/api/v1/chat/completions',{
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+OPENROUTER_API_KEY,'HTTP-Referer':'https://pharma-law-app.vercel.app','X-Title':'Pharma Law Comparator'},
-      body:JSON.stringify({model:'google/gemini-2.0-flash-001',messages:[{role:'user',content:prompt}],temperature:0.2,max_tokens:3000})
+      body:JSON.stringify({model:'google/gemini-flash-1.5',messages:[{role:'user',content:prompt}],temperature:0.2,max_tokens:3000})
     });
     if(!resp.ok){const e=await resp.json();throw new Error(e.error?.message||'API 오류');}
     const data=await resp.json();
@@ -1216,7 +1224,7 @@ async function doTranslate(){
       const resp=await fetch('https://openrouter.ai/api/v1/chat/completions',{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':'Bearer '+OPENROUTER_API_KEY,'HTTP-Referer':'https://pharma-law-app.vercel.app','X-Title':'Pharma Law Comparator'},
-        body:JSON.stringify({model:'google/gemini-2.0-flash-001',messages:[{role:'user',content:`${langNote}아래 텍스트를 자연스러운 한국어로 번역해주세요. 원문의 구조와 형식을 유지하고, 번역문만 출력하세요.\n\n---\n\n${chunks[i]}`}],temperature:0.1,max_tokens:4000})
+        body:JSON.stringify({model:'google/gemini-flash-1.5',messages:[{role:'user',content:`${langNote}아래 텍스트를 자연스러운 한국어로 번역해주세요. 원문의 구조와 형식을 유지하고, 번역문만 출력하세요.\n\n---\n\n${chunks[i]}`}],temperature:0.1,max_tokens:4000})
       });
       if(!resp.ok){const e=await resp.json();throw new Error(e.error?.message||'번역 API 오류');}
       const data=await resp.json();
@@ -1290,6 +1298,197 @@ function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').
     if(!e.target.closest('.country-add-area'))document.getElementById('country-dropdown').classList.remove('show');
   });
 })();
+</script>
+<!-- Google API -->
+<script src="https://apis.google.com/js/api.js"></script>
+<script>
+// ─── 구글 드라이브 Picker ───
+// ★ 아래 3가지를 Google Cloud Console에서 발급 후 입력하세요
+const GDRIVE_CLIENT_ID = localStorage.getItem('gdrive_client_id') || '';
+const GDRIVE_API_KEY   = localStorage.getItem('gdrive_api_key') || '';
+const GDRIVE_APP_ID    = localStorage.getItem('gdrive_app_id') || '';
+
+const GDRIVE_SCOPES = 'https://www.googleapis.com/auth/drive.readonly';
+let gdriveInited = false;
+let gdriveMode = 'analyze'; // 'analyze' or 'translate'
+
+function openGDrivePicker(mode){
+  gdriveMode = mode;
+  // 설정 키 없으면 입력 모달 표시
+  if(!localStorage.getItem('gdrive_client_id')){
+    showGDriveSetup();
+    return;
+  }
+  if(!gdriveInited){
+    gapi.load('auth2:picker', ()=>{ gdriveInited=true; doPickerAuth(); });
+  } else {
+    doPickerAuth();
+  }
+}
+
+function doPickerAuth(){
+  gapi.auth2.authorize({
+    client_id: localStorage.getItem('gdrive_client_id'),
+    scope: GDRIVE_SCOPES,
+    immediate: false
+  }, (authResult)=>{
+    if(authResult && !authResult.error){
+      buildPicker(authResult.access_token);
+    } else {
+      alert('구글 로그인에 실패했습니다. Client ID를 확인해주세요.');
+    }
+  });
+}
+
+function buildPicker(token){
+  const apiKey = localStorage.getItem('gdrive_api_key');
+  const appId  = localStorage.getItem('gdrive_app_id');
+  const view = new google.picker.DocsView()
+    .setIncludeFolders(true)
+    .setMimeTypes('text/plain,text/html,application/vnd.google-apps.document,application/pdf,text/markdown');
+
+  const picker = new google.picker.PickerBuilder()
+    .setAppId(appId)
+    .setOAuthToken(token)
+    .setDeveloperKey(apiKey)
+    .addView(view)
+    .addView(new google.picker.DocsView().setIncludeFolders(true))
+    .setCallback((data)=>gdrivePickerCallback(data, token))
+    .build();
+  picker.setVisible(true);
+}
+
+async function gdrivePickerCallback(data, token){
+  if(data.action !== google.picker.Action.PICKED) return;
+  const file = data.docs[0];
+  const fileId = file.id;
+  const fileName = file.name;
+  const mimeType = file.mimeType;
+
+  try{
+    showGDriveLoading(fileName);
+    let text = '';
+
+    if(mimeType === 'application/vnd.google-apps.document'){
+      // Google Docs → 텍스트로 내보내기
+      const resp = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=text/plain`,
+        {headers: {Authorization: 'Bearer '+token}}
+      );
+      text = await resp.text();
+    } else {
+      // 일반 파일 다운로드
+      const resp = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+        {headers: {Authorization: 'Bearer '+token}}
+      );
+      text = await resp.text();
+    }
+
+    if(gdriveMode === 'analyze'){
+      // 분석용 문서에 추가
+      if(!uploadedDocs.find(d=>d.name===fileName)){
+        let processed='', lineNum=1, pageNum=1;
+        for(const line of text.split('\n')){
+          if(line.includes('\f')){pageNum++;processed+=`\n[페이지${pageNum}시작]\n`;}
+          else{processed+=`[L${lineNum}] ${line}\n`;lineNum++;}
+        }
+        uploadedDocs.push({name:fileName, text:processed.slice(0,12000), raw:text});
+      }
+      renderSimpleFileList();
+    } else {
+      // 번역용 파일로 설정
+      transFile = new File([text], fileName, {type:'text/plain'});
+      handleTransFile(transFile);
+    }
+    hideGDriveLoading();
+  } catch(e){
+    hideGDriveLoading();
+    alert('파일을 가져오지 못했습니다: ' + e.message);
+  }
+}
+
+// ─── 구글 드라이브 설정 모달 ───
+function showGDriveSetup(){
+  const saved_cid = localStorage.getItem('gdrive_client_id')||'';
+  const saved_ak  = localStorage.getItem('gdrive_api_key')||'';
+  const saved_aid = localStorage.getItem('gdrive_app_id')||'';
+
+  const modal = document.createElement('div');
+  modal.id = 'gdrive-modal';
+  modal.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  modal.innerHTML=`
+    <div style="background:#fff;border-radius:16px;padding:2rem;width:480px;max-width:90vw;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+      <div style="font-size:18px;font-weight:700;margin-bottom:6px;">🔗 구글 드라이브 연동 설정</div>
+      <div style="font-size:12px;color:#6B6760;margin-bottom:1.5rem;line-height:1.7;">
+        최초 1회만 입력하면 이후 자동으로 사용됩니다.<br>
+        <a href="https://console.cloud.google.com" target="_blank" style="color:#4285f4;">Google Cloud Console</a>에서 발급하세요.
+        <span style="display:block;margin-top:4px;padding:8px 10px;background:#FEF3E8;border-radius:6px;color:#b45309;font-size:11px;">
+          📌 발급 방법이 복잡할 수 있어요. 아래 간단 가이드를 참고하세요.
+        </span>
+      </div>
+
+      <div style="font-size:11px;font-weight:700;color:#6B6760;margin-bottom:5px;">① Client ID</div>
+      <input id="gd-cid" type="text" value="${saved_cid}" placeholder="xxxxx.apps.googleusercontent.com"
+        style="width:100%;padding:9px 12px;border:1px solid #E2DED6;border-radius:8px;font-size:12px;margin-bottom:10px;font-family:monospace;outline:none;">
+
+      <div style="font-size:11px;font-weight:700;color:#6B6760;margin-bottom:5px;">② API Key</div>
+      <input id="gd-ak" type="text" value="${saved_ak}" placeholder="AIzaSy..."
+        style="width:100%;padding:9px 12px;border:1px solid #E2DED6;border-radius:8px;font-size:12px;margin-bottom:10px;font-family:monospace;outline:none;">
+
+      <div style="font-size:11px;font-weight:700;color:#6B6760;margin-bottom:5px;">③ App ID (Project Number)</div>
+      <input id="gd-aid" type="text" value="${saved_aid}" placeholder="123456789012"
+        style="width:100%;padding:9px 12px;border:1px solid #E2DED6;border-radius:8px;font-size:12px;margin-bottom:16px;font-family:monospace;outline:none;">
+
+      <details style="margin-bottom:16px;">
+        <summary style="font-size:12px;font-weight:600;color:#4285f4;cursor:pointer;">📖 Google Cloud Console 발급 방법 보기</summary>
+        <div style="font-size:11px;color:#6B6760;line-height:1.8;margin-top:8px;padding:10px;background:#F7F6F2;border-radius:8px;">
+          1. <a href="https://console.cloud.google.com" target="_blank" style="color:#4285f4;">console.cloud.google.com</a> 접속<br>
+          2. 새 프로젝트 만들기 → 이름 아무거나 입력<br>
+          3. 왼쪽 메뉴 → <b>API 및 서비스 → 라이브러리</b><br>
+          4. <b>"Google Drive API"</b> 검색 → 사용 설정<br>
+          5. <b>"Google Picker API"</b> 검색 → 사용 설정<br>
+          6. 왼쪽 메뉴 → <b>사용자 인증 정보</b><br>
+          7. <b>사용자 인증 정보 만들기 → OAuth 2.0 클라이언트 ID</b><br>
+          &nbsp;&nbsp;→ 웹 애플리케이션 선택<br>
+          &nbsp;&nbsp;→ 승인된 JavaScript 출처에 본인 Vercel 주소 입력<br>
+          &nbsp;&nbsp;→ 만들기 → Client ID 복사<br>
+          8. <b>사용자 인증 정보 만들기 → API 키</b> → API Key 복사<br>
+          9. 대시보드 → 프로젝트 번호 → App ID로 입력
+        </div>
+      </details>
+
+      <div style="display:flex;gap:8px;">
+        <button onclick="saveGDriveKeys()" style="flex:1;padding:10px;background:#4285f4;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">저장 후 드라이브 열기</button>
+        <button onclick="document.getElementById('gdrive-modal').remove()" style="padding:10px 16px;background:#F0EEE8;color:#6B6760;border:none;border-radius:8px;font-size:13px;cursor:pointer;">취소</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+function saveGDriveKeys(){
+  const cid = document.getElementById('gd-cid').value.trim();
+  const ak  = document.getElementById('gd-ak').value.trim();
+  const aid = document.getElementById('gd-aid').value.trim();
+  if(!cid||!ak||!aid){alert('3가지 모두 입력해주세요.');return;}
+  localStorage.setItem('gdrive_client_id', cid);
+  localStorage.setItem('gdrive_api_key', ak);
+  localStorage.setItem('gdrive_app_id', aid);
+  document.getElementById('gdrive-modal').remove();
+  gapi.load('auth2:picker', ()=>{ gdriveInited=true; doPickerAuth(); });
+}
+
+function showGDriveLoading(name){
+  const el = document.createElement('div');
+  el.id='gdrive-loading';
+  el.style.cssText='position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;border-radius:12px;padding:1.5rem 2rem;box-shadow:0 8px 30px rgba(0,0,0,0.2);z-index:9999;text-align:center;font-size:13px;color:#1A1916;';
+  el.innerHTML=`<div style="margin-bottom:10px;font-size:20px;">📂</div>구글 드라이브에서 가져오는 중...<br><span style="font-size:11px;color:#9B9890;">${esc(name)}</span>`;
+  document.body.appendChild(el);
+}
+function hideGDriveLoading(){
+  const el=document.getElementById('gdrive-loading');
+  if(el)el.remove();
+}
 </script>
 </body>
 </html>
